@@ -7,6 +7,6 @@
 
 # Sessionflow
 
-Open-source DAW built around the session workflow.
+Open-source DAW for producers, built around the arrangement.
 
 Early development. Nothing to build or run yet.
