@@ -7,7 +7,7 @@
 
 # Sessionflow
 
-Open-source DAW for producers, built around the arrangement.
+A free, open-source DAW for music production.
 
 Early development. Stack and architecture: [docs/stack.md](docs/stack.md).
 

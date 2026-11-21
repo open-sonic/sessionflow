@@ -1,6 +1,6 @@
 # Stack
 
-Arrangement-first DAW for producers. No session view, no clip launching, no live performance features.
+DAW for music production. No session view, no clip launching, no live performance features.
 
 ## Base
 
