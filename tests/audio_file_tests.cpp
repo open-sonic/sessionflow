@@ -124,8 +124,8 @@ TEST_CASE("decodes MP3 without encoder delay")
     REQUIRE(decoded.has_value());
     CHECK(decoded->sampleRate == 44100.0);
     REQUIRE(decoded->samples.channelCount() == 2);
-    // The encoder pads both ends. Only the gapless header lets the decoder trim back to 4410.
-    CHECK(decoded->samples.frameCount() == 4410);
+    // The encoder pads both ends. Only the gapless header lets the decoder trim back to two seconds.
+    CHECK(decoded->samples.frameCount() == 88200);
 
     // Lossy, so compare a steady stretch in the middle with a loose margin.
     const AudioBufferView samples = decoded->samples.view();
@@ -145,13 +145,19 @@ TEST_CASE("reader streams blocks and seeks")
     REQUIRE(reader.has_value());
     REQUIRE(reader->frameCount() == static_cast<SampleCount>(whole->samples.frameCount()));
 
+    // Forward and back, so MP3 seeks land between different seek points.
+    const SampleCount length = reader->frameCount();
     AudioBuffer block(2, 1000);
-    REQUIRE(reader->seek(2000));
-    REQUIRE(reader->read(block.view()) == 1000);
-    for (std::size_t frame = 0; frame < 1000; ++frame)
+    for (const SampleCount start : {SampleCount{7}, length * 3 / 5, length / 3})
     {
-        REQUIRE(block.view().channel(0)[frame] == whole->samples.view().channel(0)[2000 + frame]);
-        REQUIRE(block.view().channel(1)[frame] == whole->samples.view().channel(1)[2000 + frame]);
+        REQUIRE(reader->seek(start));
+        REQUIRE(reader->read(block.view()) == 1000);
+        const auto offset = static_cast<std::size_t>(start);
+        for (std::size_t frame = 0; frame < 1000; ++frame)
+        {
+            REQUIRE(block.view().channel(0)[frame] == whole->samples.view().channel(0)[offset + frame]);
+            REQUIRE(block.view().channel(1)[frame] == whole->samples.view().channel(1)[offset + frame]);
+        }
     }
 
     REQUIRE(reader->seek(reader->frameCount() - 10));

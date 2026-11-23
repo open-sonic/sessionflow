@@ -204,8 +204,9 @@ class Mp3Decoder final : public detail::AudioDecoder
         }
         channels = m_mp3.channels;
         sampleRate = m_mp3.sampleRate;
-        // MP3 has no reliable length header, so this decodes the whole file once.
+        // MP3 has no reliable length header, so this scans the whole file once.
         frameCount = static_cast<SampleCount>(drmp3_get_pcm_frame_count(&m_mp3));
+        bindSeekTable();
         return true;
     }
 
@@ -220,7 +221,23 @@ class Mp3Decoder final : public detail::AudioDecoder
     }
 
   private:
+    // Without a seek table dr_mp3 decodes from the start of the file on every seek.
+    void bindSeekTable()
+    {
+        constexpr double secondsBetweenSeekPoints = 0.5;
+        auto count =
+            static_cast<drmp3_uint32>(static_cast<double>(frameCount) / sampleRate / secondsBetweenSeekPoints) + 1;
+        m_seekPoints.resize(count);
+        if (drmp3_calculate_seek_points(&m_mp3, &count, m_seekPoints.data()) == DRMP3_TRUE)
+        {
+            m_seekPoints.resize(count);
+            drmp3_bind_seek_table(&m_mp3, count, m_seekPoints.data());
+        }
+    }
+
     drmp3 m_mp3{};
+    // dr_mp3 keeps a pointer into this, so it lives as long as the decoder.
+    std::vector<drmp3_seek_point> m_seekPoints;
     bool m_initialized = false;
 };
 
