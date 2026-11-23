@@ -18,6 +18,7 @@ add_executable(sessionflow_tests
     project_tests.cpp
     smoother_tests.cpp
     spsc_queue_tests.cpp
+    time_tests.cpp
     version_tests.cpp
 )
 target_include_directories(sessionflow_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

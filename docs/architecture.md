@@ -8,7 +8,7 @@ One directory and one CMake target per module. Every module starts with a small 
 
 | Directory | Target | Area | Contains today | Grows into |
 |---|---|---|---|---|
-| `src/core` | `sessionflow_core` | shared | Audio buffer, MIDI event, sample time, SPSC queue, smoother, real-time marker, spdlog | Shared primitives only |
+| `src/core` | `sessionflow_core` | shared | Audio buffer, MIDI event, sample and tick time, SPSC queue, smoother, real-time marker, spdlog | Shared primitives only |
 | `src/model` | `sessionflow_model` | Engine | Immutable `Project` and `Track` on immer | Full model, edit commands, undo, project file |
 | `src/engine` | `sessionflow_engine` | Engine | `Processor` contract, audio device listing with RtAudio | Audio I/O, transport, graph, mixer, recording, bounce |
 | `src/media` | `sessionflow_media` | Plugins | WAV, FLAC and MP3 decoding with dr_libs | Streaming, resampling, warping, peak cache |
@@ -38,7 +38,8 @@ flowchart LR
 | `MidiEvent` | `core/midi_event.hpp` | MIDI input, MIDI clips, instruments |
 | `SpscQueue` | `core/spsc_queue.hpp` | MIDI input, meters, snapshot handoff, recording |
 | `LinearSmoother` | `core/smoother.hpp` | Mixer, built-in devices |
-| `SampleCount` | `core/time.hpp` | Model, transport, automation |
+| `SampleCount` | `core/time.hpp` | Transport, processors, audio file offsets |
+| `TickCount`, `ticksPerBeat` | `core/time.hpp` | Model, transport, automation |
 
 Change a contract in its own PR and ask the areas that use it to review.
 
