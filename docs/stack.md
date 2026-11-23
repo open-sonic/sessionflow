@@ -19,7 +19,7 @@ DAW for music production. No session view, no clip launching, no live performanc
 | Audio I/O | RtAudio (ASIO, WASAPI, CoreAudio, JACK, ALSA, PulseAudio) | MIT-style, ASIO SDK GPLv3 |
 | MIDI | libremidi | BSD |
 | Plugin hosting | VST3 SDK, CLAP, AU on macOS | MIT, MIT, Apple |
-| UI | Dear ImGui on SDL3 | MIT, zlib |
+| UI | Dear ImGui (docking branch) on SDL3 | MIT, zlib |
 | Project model and undo | immer | Boost |
 | Library index | SQLite | Public domain |
 | Audio files | dr_wav, dr_flac, dr_mp3 | Public domain |

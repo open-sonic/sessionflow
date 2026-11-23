@@ -70,9 +70,10 @@ function(sessionflow_fetch_dependencies)
         SYSTEM
     )
 
+    # Docking branch for movable panels. Multi-viewport needs a different renderer backend.
     FetchContent_Declare(imgui
         GIT_REPOSITORY https://github.com/ocornut/imgui.git
-        GIT_TAG v1.91.9
+        GIT_TAG v1.91.9-docking
         GIT_SHALLOW TRUE
         SOURCE_SUBDIR none
         SYSTEM
