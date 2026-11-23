@@ -15,8 +15,29 @@ namespace
 // Navy from brand/tokens.json.
 constexpr Uint8 s_background[] = {0x07, 0x20, 0x59};
 
-// Waits for input instead of spinning so an idle window costs no CPU.
-constexpr Sint32 s_idleTimeoutMs = 500;
+// ImGui resolves hover and layout one frame after the input that changed them, so a single
+// frame per event would leave the window one step behind.
+constexpr int s_framesAfterInput = 3;
+
+// The native API per platform. OpenGL on Linux because SDL's Vulkan renderer is the newest
+// and least tested, and GL works on every desktop driver.
+#if defined(_WIN32)
+constexpr const char* s_rendererDriver = "direct3d11";
+#elif defined(__APPLE__)
+constexpr const char* s_rendererDriver = "metal";
+#else
+constexpr const char* s_rendererDriver = "opengl";
+#endif
+
+SDL_Renderer* createRenderer(SDL_Window* window)
+{
+    if (SDL_Renderer* renderer = SDL_CreateRenderer(window, s_rendererDriver))
+    {
+        return renderer;
+    }
+    spdlog::warn("{} renderer unavailable, using SDL's default: {}", s_rendererDriver, SDL_GetError());
+    return SDL_CreateRenderer(window, nullptr);
+}
 
 } // namespace
 
@@ -33,13 +54,14 @@ int main(int, char**)
 
     SDL_Window* window =
         SDL_CreateWindow("Sessionflow", 1280, 800, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
-    SDL_Renderer* renderer = window != nullptr ? SDL_CreateRenderer(window, nullptr) : nullptr;
+    SDL_Renderer* renderer = window != nullptr ? createRenderer(window) : nullptr;
     if (renderer == nullptr)
     {
         spdlog::error("window creation failed: {}", SDL_GetError());
         SDL_Quit();
         return 1;
     }
+    spdlog::info("renderer {}", SDL_GetRendererName(renderer));
     SDL_SetRenderVSync(renderer, 1);
 
     IMGUI_CHECKVERSION();
@@ -48,10 +70,13 @@ int main(int, char**)
     ImGui_ImplSDLRenderer3_Init(renderer);
 
     bool running = true;
+    int framesToDraw = s_framesAfterInput;
     while (running)
     {
+        // Blocks while nothing changed, so an idle window costs no CPU or GPU.
         SDL_Event event;
-        if (SDL_WaitEventTimeout(&event, s_idleTimeoutMs))
+        const bool hasEvent = framesToDraw > 0 ? SDL_PollEvent(&event) : SDL_WaitEvent(&event);
+        if (hasEvent)
         {
             do
             {
@@ -61,7 +86,13 @@ int main(int, char**)
                     running = false;
                 }
             } while (SDL_PollEvent(&event));
+            framesToDraw = s_framesAfterInput;
         }
+        if (framesToDraw == 0)
+        {
+            continue;
+        }
+        --framesToDraw;
 
         ImGui_ImplSDLRenderer3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
