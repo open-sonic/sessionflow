@@ -10,12 +10,29 @@ FetchContent_MakeAvailable(Catch2)
 
 add_executable(sessionflow_tests
     audio_buffer_tests.cpp
+    audio_file_tests.cpp
+    database_tests.cpp
+    device_listing_tests.cpp
+    gain_tests.cpp
+    plugin_folders_tests.cpp
+    project_tests.cpp
     smoother_tests.cpp
     spsc_queue_tests.cpp
     version_tests.cpp
 )
 target_include_directories(sessionflow_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(sessionflow_tests PRIVATE sessionflow_core sessionflow_warnings Catch2::Catch2WithMain)
+target_link_libraries(sessionflow_tests PRIVATE
+    sessionflow_core
+    sessionflow_model
+    sessionflow_engine
+    sessionflow_media
+    sessionflow_midi
+    sessionflow_plugins
+    sessionflow_devices
+    sessionflow_library
+    sessionflow_warnings
+    Catch2::Catch2WithMain
+)
 
 include(Catch)
 catch_discover_tests(sessionflow_tests)
