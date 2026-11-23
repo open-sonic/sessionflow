@@ -16,6 +16,7 @@ add_executable(sessionflow_tests
     gain_tests.cpp
     plugin_folders_tests.cpp
     project_tests.cpp
+    resampler_tests.cpp
     smoother_tests.cpp
     spsc_queue_tests.cpp
     time_tests.cpp
