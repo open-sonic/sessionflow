@@ -9,8 +9,12 @@ FetchContent_Declare(Catch2
 FetchContent_MakeAvailable(Catch2)
 
 add_executable(sessionflow_tests
+    audio_buffer_tests.cpp
+    smoother_tests.cpp
+    spsc_queue_tests.cpp
     version_tests.cpp
 )
+target_include_directories(sessionflow_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(sessionflow_tests PRIVATE sessionflow_core sessionflow_warnings Catch2::Catch2WithMain)
 
 include(Catch)
