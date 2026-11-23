@@ -57,4 +57,5 @@ Mark audio-thread functions `SESSIONFLOW_NONBLOCKING` from `core/realtime.hpp`. 
 - New library: declare it in `cmake/Dependencies.cmake`, pinned to a tag or commit, and link it privately from the module that owns it.
 - New module: add `src/<name>` with its own target when the first issue needs it, and add a row above.
 - Tests go in `tests/`, one file per unit. DSP helpers are in `tests/support/signals.hpp`.
-- Work on the branch Linear suggests for the issue, open a PR to `main`, keep CI green.
+- Branch per Linear issue, named `<type>/sf-<number>-<short-slug>` with the Conventional Commits type, for example `feat/sf-9-rtaudio-device-io`. The issue ID links the PR in Linear.
+- PR title in Conventional Commits form, like the commits. Open it against `main` and keep CI green.
