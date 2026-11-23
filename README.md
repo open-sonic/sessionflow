@@ -9,7 +9,7 @@
 
 A free, open-source DAW for music production.
 
-Early development. Stack and architecture: [docs/stack.md](docs/stack.md).
+Early development. Stack: [docs/stack.md](docs/stack.md). Modules and contracts: [docs/architecture.md](docs/architecture.md).
 
 ## Build
 
