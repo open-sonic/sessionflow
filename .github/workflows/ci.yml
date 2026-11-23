@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
 
+# A new push to the same branch or PR cancels the old run, so it stops using minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     strategy:
@@ -19,7 +24,12 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
 
       - if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
+        # ALSA and PulseAudio for RtAudio and libremidi, X11 and Wayland for SDL3.
+        run: >
+          sudo apt-get update && sudo apt-get install -y ninja-build
+          libasound2-dev libpulse-dev
+          libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxss-dev libxfixes-dev libxtst-dev
+          libxkbcommon-dev libwayland-dev wayland-protocols libegl-dev libgl-dev libdrm-dev libgbm-dev
 
       - if: runner.os == 'macOS'
         run: brew install ninja
