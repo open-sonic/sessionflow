@@ -22,6 +22,7 @@ add_executable(sessionflow_tests
     version_tests.cpp
 )
 target_include_directories(sessionflow_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_definitions(sessionflow_tests PRIVATE SESSIONFLOW_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 target_link_libraries(sessionflow_tests PRIVATE
     sessionflow_core
     sessionflow_model

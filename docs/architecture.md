@@ -11,7 +11,7 @@ One directory and one CMake target per module. Every module starts with a small 
 | `src/core` | `sessionflow_core` | shared | Audio buffer, MIDI event, sample and tick time, SPSC queue, smoother, real-time marker, spdlog | Shared primitives only |
 | `src/model` | `sessionflow_model` | Engine | Immutable `Project` and `Track` on immer | Full model, edit commands, undo, project file |
 | `src/engine` | `sessionflow_engine` | Engine | `Processor` contract, audio device listing with RtAudio | Audio I/O, transport, graph, mixer, recording, bounce |
-| `src/media` | `sessionflow_media` | Plugins | WAV, FLAC and MP3 decoding with dr_libs | Streaming, resampling, warping, peak cache |
+| `src/media` | `sessionflow_media` | Plugins | WAV, FLAC and MP3 decoding and streaming with dr_libs | Resampling, warping, peak cache |
 | `src/midi` | `sessionflow_midi` | Plugins | MIDI input listing with libremidi | MIDI input to the audio thread, recording, quantize |
 | `src/plugins` | `sessionflow_plugins` | Plugins | Default VST3 and CLAP folders per platform | Host process, IPC, VST3, CLAP, AU, scanner |
 | `src/devices` | `sessionflow_devices` | Devices | `GainDevice`, the reference `Processor` | Built-in effects and instruments |
