@@ -42,6 +42,14 @@ function(sessionflow_fetch_dependencies)
         SYSTEM
     )
 
+    FetchContent_Declare(r8brain
+        GIT_REPOSITORY https://github.com/avaneev/r8brain-free-src.git
+        GIT_TAG version-6.5
+        GIT_SHALLOW TRUE
+        SOURCE_SUBDIR none
+        SYSTEM
+    )
+
     # PipeWire support would fetch an unpinned readerwriterqueue.
     set(LIBREMIDI_NO_PIPEWIRE ON)
     set(LIBREMIDI_NO_BOOST ON)
@@ -79,7 +87,7 @@ function(sessionflow_fetch_dependencies)
         SYSTEM
     )
 
-    FetchContent_MakeAvailable(spdlog immer rtaudio dr_libs libremidi sqlite3 SDL3 imgui)
+    FetchContent_MakeAvailable(spdlog immer rtaudio dr_libs r8brain libremidi sqlite3 SDL3 imgui)
 
     add_library(immer INTERFACE)
     target_include_directories(immer SYSTEM INTERFACE ${immer_SOURCE_DIR})
@@ -92,6 +100,13 @@ function(sessionflow_fetch_dependencies)
     target_include_directories(sqlite3 SYSTEM PUBLIC ${sqlite3_SOURCE_DIR})
     target_compile_definitions(sqlite3 PRIVATE SQLITE_OMIT_LOAD_EXTENSION SQLITE_DQS=0)
     target_link_libraries(sqlite3 PRIVATE Threads::Threads)
+
+    # Its filter cache is shared across instances and guarded by a mutex, so it needs threads.
+    add_library(r8brain STATIC ${r8brain_SOURCE_DIR}/r8bbase.cpp)
+    target_include_directories(r8brain SYSTEM PUBLIC ${r8brain_SOURCE_DIR})
+    # Its headers include windows.h, whose min and max macros break std::min in our code.
+    target_compile_definitions(r8brain PUBLIC NOMINMAX)
+    target_link_libraries(r8brain PRIVATE Threads::Threads)
 
     add_library(imgui STATIC
         ${imgui_SOURCE_DIR}/imgui.cpp
