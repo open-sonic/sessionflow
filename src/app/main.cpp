@@ -29,6 +29,13 @@ constexpr const char* s_rendererDriver = "metal";
 constexpr const char* s_rendererDriver = "opengl";
 #endif
 
+struct App
+{
+    SDL_Renderer* renderer = nullptr;
+    std::string_view version;
+    bool drawing = false;
+};
+
 SDL_Renderer* createRenderer(SDL_Window* window)
 {
     if (SDL_Renderer* renderer = SDL_CreateRenderer(window, s_rendererDriver))
@@ -39,12 +46,51 @@ SDL_Renderer* createRenderer(SDL_Window* window)
     return SDL_CreateRenderer(window, nullptr);
 }
 
+void drawFrame(App& app)
+{
+    // The expose watch below can fire while a frame is presenting.
+    if (app.drawing)
+    {
+        return;
+    }
+    app.drawing = true;
+
+    ImGui_ImplSDLRenderer3_NewFrame();
+    ImGui_ImplSDL3_NewFrame();
+    ImGui::NewFrame();
+
+    ImGui::Begin("Sessionflow");
+    ImGui::Text("Version %.*s", static_cast<int>(app.version.size()), app.version.data());
+    ImGui::End();
+
+    ImGui::Render();
+    SDL_SetRenderDrawColor(app.renderer, s_background[0], s_background[1], s_background[2], SDL_ALPHA_OPAQUE);
+    SDL_RenderClear(app.renderer);
+    ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), app.renderer);
+    SDL_RenderPresent(app.renderer);
+
+    app.drawing = false;
+}
+
+// While the user drags a window edge, Windows and macOS run their own modal loop and the main
+// loop stalls until the mouse is released. SDL still hands expose events to watchers, so the
+// window keeps redrawing at its new size.
+bool SDLCALL redrawOnExpose(void* userData, SDL_Event* event)
+{
+    if (event->type == SDL_EVENT_WINDOW_EXPOSED)
+    {
+        drawFrame(*static_cast<App*>(userData));
+    }
+    return true;
+}
+
 } // namespace
 
 int main(int, char**)
 {
-    const std::string_view version = sessionflow::version();
-    spdlog::info("sessionflow {}", version);
+    App app;
+    app.version = sessionflow::version();
+    spdlog::info("sessionflow {}", app.version);
 
     if (!SDL_Init(SDL_INIT_VIDEO))
     {
@@ -54,20 +100,21 @@ int main(int, char**)
 
     SDL_Window* window =
         SDL_CreateWindow("Sessionflow", 1280, 800, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
-    SDL_Renderer* renderer = window != nullptr ? createRenderer(window) : nullptr;
-    if (renderer == nullptr)
+    app.renderer = window != nullptr ? createRenderer(window) : nullptr;
+    if (app.renderer == nullptr)
     {
         spdlog::error("window creation failed: {}", SDL_GetError());
         SDL_Quit();
         return 1;
     }
-    spdlog::info("renderer {}", SDL_GetRendererName(renderer));
-    SDL_SetRenderVSync(renderer, 1);
+    spdlog::info("renderer {}", SDL_GetRendererName(app.renderer));
+    SDL_SetRenderVSync(app.renderer, 1);
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-    ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
-    ImGui_ImplSDLRenderer3_Init(renderer);
+    ImGui_ImplSDL3_InitForSDLRenderer(window, app.renderer);
+    ImGui_ImplSDLRenderer3_Init(app.renderer);
+    SDL_AddEventWatch(redrawOnExpose, &app);
 
     bool running = true;
     int framesToDraw = s_framesAfterInput;
@@ -93,26 +140,14 @@ int main(int, char**)
             continue;
         }
         --framesToDraw;
-
-        ImGui_ImplSDLRenderer3_NewFrame();
-        ImGui_ImplSDL3_NewFrame();
-        ImGui::NewFrame();
-
-        ImGui::Begin("Sessionflow");
-        ImGui::Text("Version %.*s", static_cast<int>(version.size()), version.data());
-        ImGui::End();
-
-        ImGui::Render();
-        SDL_SetRenderDrawColor(renderer, s_background[0], s_background[1], s_background[2], SDL_ALPHA_OPAQUE);
-        SDL_RenderClear(renderer);
-        ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
-        SDL_RenderPresent(renderer);
+        drawFrame(app);
     }
 
+    SDL_RemoveEventWatch(redrawOnExpose, &app);
     ImGui_ImplSDLRenderer3_Shutdown();
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();
-    SDL_DestroyRenderer(renderer);
+    SDL_DestroyRenderer(app.renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
     return 0;
