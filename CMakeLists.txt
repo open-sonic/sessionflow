@@ -1,12 +1,15 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(sessionflow VERSION 0.1.0 LANGUAGES CXX)
+project(sessionflow VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(SESSIONFLOW_BUILD_TESTS "Build tests" ON)
+
+include(cmake/Dependencies.cmake)
+sessionflow_fetch_dependencies()
 
 add_library(sessionflow_warnings INTERFACE)
 if(MSVC)
@@ -16,6 +19,13 @@ else()
 endif()
 
 add_subdirectory(src/core)
+add_subdirectory(src/model)
+add_subdirectory(src/engine)
+add_subdirectory(src/media)
+add_subdirectory(src/midi)
+add_subdirectory(src/plugins)
+add_subdirectory(src/devices)
+add_subdirectory(src/library)
 add_subdirectory(src/app)
 
 if(SESSIONFLOW_BUILD_TESTS)
