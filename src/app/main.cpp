@@ -58,6 +58,8 @@ void drawFrame(App& app)
     ImGui_ImplSDLRenderer3_NewFrame();
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
+    // Passthru keeps the empty center see-through, so the window background shows behind panels.
+    ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
 
     ImGui::Begin("Sessionflow");
     ImGui::Text("Version %.*s", static_cast<int>(app.version.size()), app.version.data());
@@ -112,6 +114,7 @@ int main(int, char**)
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     ImGui_ImplSDL3_InitForSDLRenderer(window, app.renderer);
     ImGui_ImplSDLRenderer3_Init(app.renderer);
     SDL_AddEventWatch(redrawOnExpose, &app);
