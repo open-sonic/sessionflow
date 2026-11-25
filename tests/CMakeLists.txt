@@ -14,6 +14,7 @@ add_executable(sessionflow_tests
     database_tests.cpp
     device_listing_tests.cpp
     gain_tests.cpp
+    hosted_processor_tests.cpp
     plugin_folders_tests.cpp
     project_tests.cpp
     resampler_tests.cpp
@@ -39,3 +40,11 @@ target_link_libraries(sessionflow_tests PRIVATE
 
 include(Catch)
 catch_discover_tests(sessionflow_tests)
+
+add_executable(sessionflow_test_plugin_host support/test_plugin_host.cpp)
+target_include_directories(sessionflow_test_plugin_host PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(sessionflow_test_plugin_host PRIVATE sessionflow_plugins sessionflow_warnings)
+add_dependencies(sessionflow_tests sessionflow_test_plugin_host)
+target_compile_definitions(sessionflow_tests PRIVATE
+    SESSIONFLOW_TEST_PLUGIN_HOST="$<TARGET_FILE:sessionflow_test_plugin_host>"
+)
