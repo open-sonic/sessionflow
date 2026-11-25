@@ -14,6 +14,7 @@ add_executable(sessionflow_tests
     database_tests.cpp
     device_listing_tests.cpp
     gain_tests.cpp
+    midi_input_collector_tests.cpp
     plugin_folders_tests.cpp
     project_tests.cpp
     resampler_tests.cpp

@@ -12,7 +12,7 @@ One directory and one CMake target per module. Every module starts with a small 
 | `src/model` | `sessionflow_model` | Engine | Immutable `Project`, tracks, audio and MIDI clips, notes, automation lanes and tempo map on immer | Full model, edit commands, undo, project file |
 | `src/engine` | `sessionflow_engine` | Engine | `Processor` contract, audio device listing with RtAudio | Audio I/O, transport, graph, mixer, recording, bounce |
 | `src/media` | `sessionflow_media` | Plugins | WAV, FLAC and MP3 decoding and streaming with dr_libs, resampling with r8brain | Warping, peak cache |
-| `src/midi` | `sessionflow_midi` | Plugins | MIDI input listing with libremidi | MIDI input to the audio thread, recording, quantize |
+| `src/midi` | `sessionflow_midi` | Plugins | MIDI inputs with libremidi, hot-plugging, timestamped handoff to the audio thread | Recording, quantize |
 | `src/plugins` | `sessionflow_plugins` | Plugins | Default VST3 and CLAP folders per platform | Host process, IPC, VST3, CLAP, AU, scanner |
 | `src/devices` | `sessionflow_devices` | Devices | `GainDevice`, the reference `Processor` | Built-in effects and instruments |
 | `src/library` | `sessionflow_library` | App | SQLite connection wrapper | Library index, folder scanning |
