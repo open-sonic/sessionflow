@@ -18,7 +18,7 @@ constexpr std::chrono::seconds s_crashDetectionLimit{5};
 float processOnes(HostedProcessor& processor, AudioBuffer& buffer)
 {
     test::fillConstant(buffer.view(), 1.0f);
-    processor.process({.audio = buffer.view()});
+    processor.process({.audio = buffer.view(), .sidechain = {}, .midi = {}, .transport = {}});
     return test::peak(buffer.view());
 }
 
