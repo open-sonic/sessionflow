@@ -1,7 +1,12 @@
 add_library(sessionflow_plugins
+    child_process.cpp
+    hosted_processor.cpp
+    ipc_signal.cpp
     plugin_folders.cpp
+    plugin_host.cpp
+    shared_memory.cpp
 )
 target_link_libraries(sessionflow_plugins
     PUBLIC sessionflow_core sessionflow_engine
-    PRIVATE sessionflow_warnings
+    PRIVATE Threads::Threads sessionflow_warnings
 )

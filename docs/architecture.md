@@ -13,7 +13,7 @@ One directory and one CMake target per module. Every module starts with a small 
 | `src/engine` | `sessionflow_engine` | Engine | `Processor` contract, audio device listing with RtAudio | Audio I/O, transport, graph, mixer, recording, bounce |
 | `src/media` | `sessionflow_media` | Plugins | WAV, FLAC and MP3 decoding and streaming with dr_libs, resampling with r8brain | Warping, peak cache |
 | `src/midi` | `sessionflow_midi` | Plugins | MIDI input listing with libremidi | MIDI input to the audio thread, recording, quantize |
-| `src/plugins` | `sessionflow_plugins` | Plugins | Default VST3 and CLAP folders per platform | Host process, IPC, VST3, CLAP, AU, scanner |
+| `src/plugins` | `sessionflow_plugins` | Plugins | Default VST3 and CLAP folders per platform, out-of-process host with shared-memory audio IPC | VST3, CLAP, AU, scanner |
 | `src/devices` | `sessionflow_devices` | Devices | `GainDevice`, the reference `Processor` | Built-in effects and instruments |
 | `src/library` | `sessionflow_library` | App | SQLite connection wrapper | Library index, folder scanning |
 | `src/app` | `sessionflow` | App | SDL3 window with Dear ImGui | All UI |
@@ -50,6 +50,8 @@ Change a contract in its own PR and ask the areas that use it to review.
 | Audio | Reads model snapshots, runs processors, pushes to queues | Allocates, locks, does I/O, logs, throws |
 | UI | Builds edit commands, reads meters and state | Waits on the audio thread |
 | Workers | Disk streaming, peaks, scanning, saving, freeing old snapshots | Touches UI state |
+
+One exception: `HostedProcessor` waits for its plugin host process, bounded by half a block.
 
 Mark audio-thread functions `SESSIONFLOW_NONBLOCKING` from `core/realtime.hpp`. Clang 20+ then rejects blocking calls inside them.
 
