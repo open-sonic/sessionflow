@@ -8,6 +8,7 @@
 #include <bitset>
 #include <mutex>
 #include <optional>
+#include <span>
 
 namespace sessionflow
 {
@@ -23,6 +24,20 @@ std::string displayName(const libremidi::input_port& port)
 void logMidiError(libremidi::midi_error, std::string_view message)
 {
     spdlog::warn("midi: {}", message);
+}
+
+// Only channel voice messages reach instruments. MidiEvent has no length, so a consumer
+// can't tell a 1- or 2-byte system message from a note, and transport and reset messages
+// don't belong in an instrument anyway.
+bool isChannelVoiceMessage(std::span<const std::uint8_t> bytes)
+{
+    if (bytes.empty() || bytes[0] < 0x80 || bytes[0] >= 0xF0)
+    {
+        return false;
+    }
+    const std::uint8_t type = bytes[0] & 0xF0;
+    const std::size_t expectedSize = type == 0xC0 || type == 0xD0 ? 2 : 3;
+    return bytes.size() == expectedSize;
 }
 
 // The notes and sustain pedals an input holds down, so unplugging it can release them.
@@ -180,8 +195,7 @@ struct MidiInputs::Impl
         libremidi::input_configuration config;
         config.on_message = [this, slot](libremidi::message&& message)
         {
-            // Sysex is ignored, so everything else fits a MidiEvent.
-            if (message.bytes.empty() || message.bytes.size() > 3)
+            if (!isChannelVoiceMessage(message.bytes))
             {
                 return;
             }
