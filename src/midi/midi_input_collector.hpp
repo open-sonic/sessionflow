@@ -23,7 +23,7 @@ struct TimedMidiMessage
 
 // The clock MIDI input is stamped with. Read it at the start of each audio callback and pass
 // it to MidiInputCollector::collect().
-std::int64_t midiInputClockNs() noexcept;
+std::int64_t midiInputClockNs() noexcept SESSIONFLOW_NONBLOCKING;
 
 // Hands MIDI input from device callback threads to the audio thread. Every source has its own
 // queue, so each device callback thread is the single producer of its source.
@@ -35,8 +35,9 @@ class MidiInputCollector
     static constexpr std::size_t queueCapacity = 1024;
 
     // Called from the callback thread of source. Drops the message and returns false when that
-    // source's queue is full. A dropped note-off or sustain release is remembered and delivered
-    // once the queue has room again, so no note hangs.
+    // source's queue is full or source is not below maxSources. A note-off or sustain release
+    // dropped for a full queue is remembered and delivered once the queue has room again, so no
+    // note hangs.
     bool push(std::size_t source, const TimedMidiMessage& message) noexcept;
 
     // Audio thread. Maps the messages stamped between the previous call's blockStartNs and this

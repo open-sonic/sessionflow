@@ -29,5 +29,6 @@ TEST_CASE("opening MIDI inputs works without hardware")
     MidiInputs inputs;
     std::array<MidiEvent, 8> events{};
 
-    CHECK(inputs.collector().collect(midiInputClockNs(), 512, 48000.0, events) == 0);
+    // A developer machine may have a keyboard attached, so input is allowed, just not required.
+    CHECK(inputs.collector().collect(midiInputClockNs(), 512, 48000.0, events) <= events.size());
 }

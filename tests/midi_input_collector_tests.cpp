@@ -220,3 +220,10 @@ TEST_CASE("reset keeps the releases it drops")
     CHECK(events[0].data == std::array<std::uint8_t, 3>{0x80, 62, 0});
     CHECK(events[1].data == std::array<std::uint8_t, 3>{0xB3, 64, 0});
 }
+
+TEST_CASE("a source out of range is dropped")
+{
+    auto collector = std::make_unique<MidiInputCollector>();
+    CHECK_FALSE(collector->push(MidiInputCollector::maxSources, noteOn(s_windowStartNs, 60)));
+    CHECK(collector->droppedCount() == 1);
+}

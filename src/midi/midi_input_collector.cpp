@@ -19,7 +19,7 @@ constexpr std::uint8_t s_sustainPedal = 64;
 
 } // namespace
 
-std::int64_t midiInputClockNs() noexcept
+std::int64_t midiInputClockNs() noexcept SESSIONFLOW_NONBLOCKING
 {
     // libremidi's SystemMonotonic timestamps use the same clock.
     using namespace std::chrono;
@@ -89,6 +89,11 @@ bool MidiInputCollector::flush(LostReleases& lost, Emit&& emit) noexcept SESSION
 
 bool MidiInputCollector::push(std::size_t source, const TimedMidiMessage& message) noexcept
 {
+    if (source >= maxSources)
+    {
+        m_droppedCount.fetch_add(1, std::memory_order_relaxed);
+        return false;
+    }
     Source& target = m_sources[source];
     const auto pushLost = [&](const std::array<std::uint8_t, 3>& data)
     { return target.queue.tryPush({.timeNs = message.timeNs, .data = data}); };
