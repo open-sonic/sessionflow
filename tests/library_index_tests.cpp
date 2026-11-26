@@ -156,6 +156,23 @@ TEST_CASE("an index file keeps its entries")
     CHECK(names(reopened->search("kick")) == std::vector<std::string>{"Kick"});
 }
 
+TEST_CASE("removing an entry deletes its tags from the file")
+{
+    const TemporaryFile file("sessionflow_library_index_tags.db");
+    {
+        std::optional<LibraryIndex> index = LibraryIndex::open(file.path);
+        REQUIRE(index);
+        LibraryEntry entry = sample("Clap");
+        entry.tags = {"drums", "short"};
+        REQUIRE(index->put(std::vector{entry}));
+        REQUIRE(index->remove(entry.path));
+    }
+
+    std::optional<Database> database = Database::open(file.path);
+    REQUIRE(database);
+    CHECK(database->queryInteger("SELECT COUNT(*) FROM tags") == 0);
+}
+
 TEST_CASE("files that aren't an index are not opened")
 {
     const TemporaryFile file("sessionflow_library_index_foreign.db");
