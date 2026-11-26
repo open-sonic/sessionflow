@@ -10,7 +10,7 @@ One directory and one CMake target per module. Every module starts with a small 
 |---|---|---|---|---|
 | `src/core` | `sessionflow_core` | shared | Audio buffer, MIDI event, sample and tick time, SPSC queue, smoother, real-time marker, spdlog | Shared primitives only |
 | `src/model` | `sessionflow_model` | Engine | Immutable `Project`, tracks, audio and MIDI clips, notes, automation lanes and tempo map on immer | Full model, edit commands, undo, project file |
-| `src/engine` | `sessionflow_engine` | Engine | `Processor` contract, `AudioIo` device streams and device listing with RtAudio | Transport, graph, mixer, recording, bounce |
+| `src/engine` | `sessionflow_engine` | Engine | `Processor` contract, `AudioIo` device streams and device listing with RtAudio, `TimeMap`, `Transport` with loop, `Metronome` | Graph, mixer, recording, bounce |
 | `src/media` | `sessionflow_media` | Plugins | WAV, FLAC and MP3 decoding and streaming with dr_libs, resampling with r8brain | Warping, peak cache |
 | `src/midi` | `sessionflow_midi` | Plugins | MIDI inputs with libremidi, hot-plugging, timestamped handoff to the audio thread | Recording, quantize |
 | `src/plugins` | `sessionflow_plugins` | Plugins | Default VST3 and CLAP folders per platform | Host process, IPC, VST3, CLAP, AU, scanner |
@@ -40,6 +40,8 @@ flowchart LR
 | `LinearSmoother` | `core/smoother.hpp` | Mixer, built-in devices |
 | `AudioCallback` | `engine/audio_callback.hpp` | The engine graph root, `tools/audio_check` |
 | `SampleCount` | `core/time.hpp` | Transport, processors, audio file offsets |
+| `TimeMap` | `engine/time_map.hpp` | Transport, metronome, clip players, automation, UI rulers |
+| `TransportSegment` | `engine/transport.hpp` | Everything that renders on the timeline |
 | `TickCount`, `ticksPerBeat` | `core/time.hpp` | Model, transport, automation |
 
 Change a contract in its own PR and ask the areas that use it to review.
