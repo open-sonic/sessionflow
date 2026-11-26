@@ -26,9 +26,10 @@ namespace
 // Without permission for real-time scheduling RtAudio falls back to a normal thread.
 constexpr int s_realtimePriority = 70;
 
-// CoreAudio, JACK and ASIO close a disconnected stream on a driver thread. Their error
-// callback fires from inside closeStream(), so that thread is still finishing when we see
-// the disconnect. RtAudio offers nothing to wait on.
+// After a driver error, a driver thread may still be changing the stream: CoreAudio, JACK
+// and ASIO close a disconnected stream from inside their error report, and WASAPI's stream
+// thread sets its state after reporting. RtAudio's stream state isn't atomic and there is
+// nothing to wait on, so stop() leaves the stream alone this long first.
 constexpr std::chrono::milliseconds s_driverCloseGrace{200};
 
 // Denormal floats make recursive filters and reverb tails many times slower, which is enough
@@ -91,6 +92,11 @@ class DriverError
         m_ready.store(true, std::memory_order_release);
     }
 
+    bool hasError() const noexcept
+    {
+        return m_ready.load(std::memory_order_acquire);
+    }
+
     std::string text(std::string_view fallback) const
     {
         if (!m_ready.load(std::memory_order_acquire))
@@ -114,9 +120,31 @@ class DriverError
     std::size_t m_length = 0;
 };
 
-std::string deviceName(RtAudio& audio, unsigned int deviceId)
+// 0 when no such device exists or it has no channels in that direction.
+unsigned int findDevice(RtAudio& audio, const std::string& name, bool isOutput)
 {
-    return deviceId == 0 ? std::string() : audio.getDeviceInfo(deviceId).name;
+    if (name.empty())
+    {
+        return isOutput ? audio.getDefaultOutputDevice() : audio.getDefaultInputDevice();
+    }
+    for (const unsigned int id : audio.getDeviceIds())
+    {
+        const RtAudio::DeviceInfo info = audio.getDeviceInfo(id);
+        if (info.name == name && (isOutput ? info.outputChannels : info.inputChannels) > 0)
+        {
+            return id;
+        }
+    }
+    return 0;
+}
+
+std::string deviceNotFound(const std::string& name, const std::string& direction)
+{
+    if (name.empty())
+    {
+        return "no default audio " + direction + " device found";
+    }
+    return "audio " + direction + " device \"" + name + "\" not found";
 }
 
 } // namespace
@@ -134,10 +162,6 @@ struct AudioIo::Stream
         {
             return;
         }
-        if (type == RTAUDIO_DEVICE_DISCONNECT)
-        {
-            deviceLost.store(true, std::memory_order_release);
-        }
         error.report(text);
     }
 
@@ -154,7 +178,6 @@ struct AudioIo::Stream
         return 0;
     }
 
-    std::atomic<bool> deviceLost{false};
     std::atomic<std::uint64_t> xruns{0};
     DriverError error;
     std::optional<DeviceBlockRenderer> renderer;
@@ -188,7 +211,7 @@ std::optional<AudioStreamInfo> AudioIo::start(const AudioStreamConfig& config, A
         api = RtAudio::getCompiledApiByDisplayName(config.api);
         if (api == RtAudio::UNSPECIFIED)
         {
-            return fail(fmt::format("unknown audio API \"{}\"", config.api));
+            return fail("unknown audio API \"" + config.api + "\"");
         }
     }
     if (config.outputChannels == 0 && config.inputChannels == 0)
@@ -197,8 +220,8 @@ std::optional<AudioStreamInfo> AudioIo::start(const AudioStreamConfig& config, A
     }
     if (config.sampleRate == 0 || config.bufferFrames == 0)
     {
-        return fail(fmt::format("sample rate and buffer size must be positive, got {} Hz and {} frames",
-                                config.sampleRate, config.bufferFrames));
+        return fail("sample rate and buffer size must be positive, got " + std::to_string(config.sampleRate) +
+                    " Hz and " + std::to_string(config.bufferFrames) + " frames");
     }
 
     auto stream = std::make_unique<Stream>(api);
@@ -206,18 +229,18 @@ std::optional<AudioStreamInfo> AudioIo::start(const AudioStreamConfig& config, A
 
     RtAudio::StreamParameters output;
     output.nChannels = config.outputChannels;
-    output.deviceId = config.outputDevice != 0 ? config.outputDevice : audio.getDefaultOutputDevice();
+    output.deviceId = config.outputChannels > 0 ? findDevice(audio, config.outputDevice, true) : 0;
     if (config.outputChannels > 0 && output.deviceId == 0)
     {
-        return fail("no audio output device found");
+        return fail(deviceNotFound(config.outputDevice, "output"));
     }
 
     RtAudio::StreamParameters input;
     input.nChannels = config.inputChannels;
-    input.deviceId = config.inputDevice != 0 ? config.inputDevice : audio.getDefaultInputDevice();
+    input.deviceId = config.inputChannels > 0 ? findDevice(audio, config.inputDevice, false) : 0;
     if (config.inputChannels > 0 && input.deviceId == 0)
     {
-        return fail("no audio input device found");
+        return fail(deviceNotFound(config.inputDevice, "input"));
     }
 
     RtAudio::StreamOptions options;
@@ -248,8 +271,8 @@ std::optional<AudioStreamInfo> AudioIo::start(const AudioStreamConfig& config, A
 
     AudioStreamInfo info{
         .api = RtAudio::getApiDisplayName(audio.getCurrentApi()),
-        .outputDeviceName = config.outputChannels > 0 ? deviceName(audio, output.deviceId) : std::string(),
-        .inputDeviceName = config.inputChannels > 0 ? deviceName(audio, input.deviceId) : std::string(),
+        .outputDeviceName = output.deviceId != 0 ? audio.getDeviceInfo(output.deviceId).name : std::string(),
+        .inputDeviceName = input.deviceId != 0 ? audio.getDeviceInfo(input.deviceId).name : std::string(),
         .outputChannels = config.outputChannels,
         .inputChannels = config.inputChannels,
         .sampleRate = sampleRate,
@@ -269,7 +292,7 @@ void AudioIo::stop()
     {
         return;
     }
-    if (m_stream->deviceLost.load(std::memory_order_acquire))
+    if (m_stream->error.hasError())
     {
         std::this_thread::sleep_for(s_driverCloseGrace);
     }
@@ -292,10 +315,10 @@ bool AudioIo::poll()
     {
         return false;
     }
-    // A disconnect is flagged by CoreAudio, JACK and ASIO. WASAPI instead ends its stream
-    // thread, which leaves the stream open but no longer running.
-    const bool isDeviceLost = m_stream->deviceLost.load(std::memory_order_acquire);
-    if (!isDeviceLost && m_stream->rtAudio.isStreamRunning())
+    // Every way a running stream dies goes through the driver's error report: a disconnect on
+    // CoreAudio, JACK and ASIO, and the end of WASAPI's stream thread. Only our own flag is
+    // read here, because a driver thread may still be changing RtAudio's stream state.
+    if (!m_stream->error.hasError())
     {
         return false;
     }
@@ -309,8 +332,7 @@ bool AudioIo::poll()
 
 bool AudioIo::isRunning() const noexcept
 {
-    return m_stream != nullptr && !m_stream->deviceLost.load(std::memory_order_acquire) &&
-           m_stream->rtAudio.isStreamRunning();
+    return m_stream != nullptr && !m_stream->error.hasError();
 }
 
 std::uint64_t AudioIo::xrunCount() const noexcept

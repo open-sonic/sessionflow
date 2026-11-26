@@ -32,7 +32,7 @@ constexpr const char* s_usage = R"(usage: sessionflow_audio_check [options]
 
   --list            list audio APIs and devices, then exit
   --api NAME        audio API by display name, default: the platform default
-  --device ID       output device ID from --list, default: the default output
+  --device NAME     output device name from --list, default: the default output
   --rate HZ         sample rate, default 48000
   --buffer FRAMES   buffer size, default 64
   --seconds N       how long to play, default 10
@@ -131,7 +131,7 @@ std::optional<Options> parseOptions(int argc, char** argv)
         }
         else if (argument == "--device" && hasValue)
         {
-            options.stream.outputDevice = static_cast<unsigned int>(std::strtoul(argv[++index], nullptr, 10));
+            options.stream.outputDevice = argv[++index];
         }
         else if (argument == "--rate" && hasValue)
         {
@@ -165,8 +165,8 @@ void listDevices()
             {
                 rates += (rates.empty() ? "" : ", ") + std::to_string(rate);
             }
-            std::printf("  %u  %s  in %u, out %u%s%s  rates: %s\n", device.id, device.name.c_str(),
-                        device.inputChannels, device.outputChannels, device.isDefaultOutput ? ", default output" : "",
+            std::printf("  %s  in %u, out %u%s%s  rates: %s\n", device.name.c_str(), device.inputChannels,
+                        device.outputChannels, device.isDefaultOutput ? ", default output" : "",
                         device.isDefaultInput ? ", default input" : "", rates.c_str());
         }
     }

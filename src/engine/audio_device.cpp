@@ -40,7 +40,6 @@ std::vector<AudioDeviceInfo> listAudioDevices(std::string_view api)
     {
         const RtAudio::DeviceInfo info = audio.getDeviceInfo(id);
         devices.push_back({
-            .id = info.ID,
             .name = info.name,
             .inputChannels = info.inputChannels,
             .outputChannels = info.outputChannels,

@@ -9,7 +9,6 @@ namespace sessionflow
 
 struct AudioDeviceInfo
 {
-    unsigned int id = 0;
     std::string name{};
     unsigned int inputChannels = 0;
     unsigned int outputChannels = 0;
@@ -24,7 +23,9 @@ struct AudioDeviceInfo
 std::vector<std::string> compiledAudioApis();
 
 // Devices of the named API, or of the default API when api is empty. Empty on machines without
-// audio hardware and for unknown API names. Device IDs stay valid only for the same API.
+// audio hardware and for unknown API names. While an ASIO stream is open in this process,
+// RtAudio cannot probe ASIO and the ASIO list is empty: list devices before starting and keep
+// the result.
 std::vector<AudioDeviceInfo> listAudioDevices(std::string_view api = {});
 
 } // namespace sessionflow

@@ -12,9 +12,12 @@ namespace sessionflow
 
 struct AudioStreamConfig
 {
-    std::string api{};             // display name from compiledAudioApis(), empty for the default API
-    unsigned int outputDevice = 0; // 0 picks the default output
-    unsigned int inputDevice = 0;  // 0 picks the default input
+    // Display names from compiledAudioApis() and listAudioDevices(). Empty picks the default.
+    // Devices go by name because RtAudio renumbers them for every instance in enumeration
+    // order, so an ID from an earlier listing can point at another device after a hot-plug.
+    std::string api{};
+    std::string outputDevice{};
+    std::string inputDevice{};
     unsigned int outputChannels = 2;
     unsigned int inputChannels = 0; // 0 opens the stream without input
     unsigned int sampleRate = 48000;
@@ -42,7 +45,6 @@ class AudioIo
     AudioIo();
     ~AudioIo();
 
-    // The driver keeps a pointer to the stream state, so it must not move.
     AudioIo(const AudioIo&) = delete;
     AudioIo& operator=(const AudioIo&) = delete;
 
@@ -55,10 +57,11 @@ class AudioIo
     void stop();
 
     // Call regularly, for example once per UI frame. Notices a device that was unplugged or a
-    // driver that stopped on its own, closes the stream and returns true once. Call start()
+    // driver that reported an error, closes the stream and returns true once. Call start()
     // again to reopen, with the same or a fallback device.
     bool poll();
 
+    // True from a successful start() until stop(), or until the driver reports an error.
     bool isRunning() const noexcept;
 
     // Underruns and overflows the driver reported since start(). Not every API reports them.

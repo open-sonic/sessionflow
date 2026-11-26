@@ -82,13 +82,13 @@ TEST_CASE("a stream without input and output channels is rejected")
     CHECK_FALSE(audio.lastError().empty());
 }
 
-TEST_CASE("a device ID that does not exist fails without starting")
+TEST_CASE("a device name that does not exist fails with the name in the error")
 {
     AudioIo audio;
     CountingCallback callback;
 
-    CHECK_FALSE(audio.start({.outputDevice = 999999}, callback).has_value());
-    CHECK_FALSE(audio.lastError().empty());
+    CHECK_FALSE(audio.start({.outputDevice = "No Such Device"}, callback).has_value());
+    CHECK(audio.lastError().find("No Such Device") != std::string::npos);
     CHECK_FALSE(audio.isRunning());
 }
 
@@ -158,9 +158,9 @@ TEST_CASE("switching through every output device of every API never crashes", "[
             {
                 continue;
             }
-            INFO(api << " device " << device.id << " " << device.name);
+            INFO(api << " device " << device.name);
             // Devices may be busy or refuse the format. That has to fail cleanly, not crash.
-            if (audio.start({.api = api, .outputDevice = device.id, .bufferFrames = 128}, callback))
+            if (audio.start({.api = api, .outputDevice = device.name, .bufferFrames = 128}, callback))
             {
                 CHECK(callback.waitForBlocks(5));
                 ++started;
