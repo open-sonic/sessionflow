@@ -60,11 +60,21 @@ inline constexpr std::size_t finestSamplesPerPeak = 256;
 // and when stopped.
 std::optional<WaveformPeaks> buildWaveformPeaks(const std::filesystem::path& source, std::stop_token stop = {});
 
-// The cache file records the source's size and modification time and is only read back while
-// both still match.
-bool savePeakFile(const std::filesystem::path& peakFile, const std::filesystem::path& source,
-                  const WaveformPeaks& peaks);
-std::optional<WaveformPeaks> loadPeakFile(const std::filesystem::path& peakFile, const std::filesystem::path& source);
+// Size and modification time of a source. A peak file is only read back while both still match.
+struct SourceStamp
+{
+    std::uint64_t size = 0;
+    std::int64_t modified = 0;
+
+    bool operator==(const SourceStamp&) const = default;
+};
+
+std::optional<SourceStamp> stampSource(const std::filesystem::path& source);
+
+// Take the stamp before building the peaks. A source edited during the build then fails the
+// check on the next load instead of keeping stale peaks.
+bool savePeakFile(const std::filesystem::path& peakFile, const SourceStamp& stamp, const WaveformPeaks& peaks);
+std::optional<WaveformPeaks> loadPeakFile(const std::filesystem::path& peakFile, const SourceStamp& stamp);
 
 // Unique per source path, so two sources with the same name don't share a cache file.
 std::filesystem::path peakFilePath(const std::filesystem::path& cacheDirectory, const std::filesystem::path& source);

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <string>
 #include <thread>
 
 using namespace sessionflow;
@@ -16,11 +17,13 @@ namespace
 
 const std::filesystem::path testData = SESSIONFLOW_TEST_DATA_DIR;
 
+// One per test, so ctest can run them in parallel.
 struct TemporaryDirectory
 {
-    std::filesystem::path path = std::filesystem::temp_directory_path() / "sessionflow_peak_tests";
+    std::filesystem::path path;
 
-    TemporaryDirectory()
+    explicit TemporaryDirectory(const std::string& name)
+        : path(std::filesystem::temp_directory_path() / ("sessionflow_peak_tests_" + name))
     {
         std::filesystem::remove_all(path);
         std::filesystem::create_directories(path);
@@ -124,34 +127,40 @@ TEST_CASE("level for a zoom is the coarsest with at least one peak per pixel")
 
 TEST_CASE("peak file loads back until the source changes")
 {
-    TemporaryDirectory directory;
+    TemporaryDirectory directory("reload");
     const std::filesystem::path source = directory.path / "clip.flac";
     std::filesystem::copy_file(testData / "sine_24bit.flac", source);
     const std::filesystem::path peakFile = peakFilePath(directory.path / "peaks", source);
 
+    const std::optional<SourceStamp> stamp = stampSource(source);
+    REQUIRE(stamp.has_value());
     std::optional<WaveformPeaks> built = buildWaveformPeaks(source);
     REQUIRE(built.has_value());
-    REQUIRE(savePeakFile(peakFile, source, *built));
+    REQUIRE(savePeakFile(peakFile, *stamp, *built));
 
-    std::optional<WaveformPeaks> loaded = loadPeakFile(peakFile, source);
+    std::optional<WaveformPeaks> loaded = loadPeakFile(peakFile, *stampSource(source));
     REQUIRE(loaded.has_value());
     requireSamePeaks(*loaded, *built);
 
     std::filesystem::copy_file(testData / "sine.mp3", source, std::filesystem::copy_options::overwrite_existing);
-    CHECK_FALSE(loadPeakFile(peakFile, source).has_value());
+    const std::optional<SourceStamp> changed = stampSource(source);
+    REQUIRE(changed.has_value());
+    CHECK_FALSE(loadPeakFile(peakFile, *changed).has_value());
 }
 
 TEST_CASE("truncated peak files are rejected")
 {
-    TemporaryDirectory directory;
+    TemporaryDirectory directory("truncated");
     const std::filesystem::path source = testData / "sine_24bit.flac";
     const std::filesystem::path peakFile = peakFilePath(directory.path, source);
+    const std::optional<SourceStamp> stamp = stampSource(source);
     std::optional<WaveformPeaks> built = buildWaveformPeaks(source);
+    REQUIRE(stamp.has_value());
     REQUIRE(built.has_value());
-    REQUIRE(savePeakFile(peakFile, source, *built));
+    REQUIRE(savePeakFile(peakFile, *stamp, *built));
 
     std::filesystem::resize_file(peakFile, std::filesystem::file_size(peakFile) - 1);
-    CHECK_FALSE(loadPeakFile(peakFile, source).has_value());
+    CHECK_FALSE(loadPeakFile(peakFile, *stamp).has_value());
 }
 
 TEST_CASE("sources with the same name get different peak files")
@@ -168,7 +177,7 @@ TEST_CASE("sources with the same name get different peak files")
 
 TEST_CASE("peak cache builds in the background and reuses the file next time")
 {
-    TemporaryDirectory directory;
+    TemporaryDirectory directory("background");
     const std::filesystem::path source = testData / "sine.mp3";
     const auto waitForPeaks = [&](PeakCache& cache)
     {
@@ -203,7 +212,7 @@ TEST_CASE("peak cache builds in the background and reuses the file next time")
 
 TEST_CASE("peak cache stops while a source is still queued")
 {
-    TemporaryDirectory directory;
+    TemporaryDirectory directory("stop");
     PeakCache cache(directory.path);
     CHECK_FALSE(cache.find(testData / "missing.wav"));
     CHECK_FALSE(cache.find(testData / "sine.mp3"));

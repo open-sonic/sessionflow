@@ -61,15 +61,20 @@ PeakLevel coarsen(const PeakLevel& finer, std::size_t channels)
     return level;
 }
 
-struct SourceStamp
+template <typename T> void writeValue(std::ofstream& file, const T& value)
 {
-    std::uint64_t size = 0;
-    std::int64_t modified = 0;
+    file.write(reinterpret_cast<const char*>(&value), sizeof(T));
+}
 
-    bool operator==(const SourceStamp&) const = default;
-};
+template <typename T> bool readValue(std::ifstream& file, T& value)
+{
+    file.read(reinterpret_cast<char*>(&value), sizeof(T));
+    return static_cast<bool>(file);
+}
 
-std::optional<SourceStamp> stampOf(const std::filesystem::path& source)
+} // namespace
+
+std::optional<SourceStamp> stampSource(const std::filesystem::path& source)
 {
     std::error_code error;
     const std::uintmax_t size = std::filesystem::file_size(source, error);
@@ -84,19 +89,6 @@ std::optional<SourceStamp> stampOf(const std::filesystem::path& source)
     }
     return SourceStamp{size, static_cast<std::int64_t>(modified.time_since_epoch().count())};
 }
-
-template <typename T> void writeValue(std::ofstream& file, const T& value)
-{
-    file.write(reinterpret_cast<const char*>(&value), sizeof(T));
-}
-
-template <typename T> bool readValue(std::ifstream& file, T& value)
-{
-    file.read(reinterpret_cast<char*>(&value), sizeof(T));
-    return static_cast<bool>(file);
-}
-
-} // namespace
 
 const PeakLevel& WaveformPeaks::levelFor(double samplesPerPixel) const noexcept
 {
@@ -162,15 +154,8 @@ std::optional<WaveformPeaks> buildWaveformPeaks(const std::filesystem::path& sou
     return result;
 }
 
-bool savePeakFile(const std::filesystem::path& peakFile, const std::filesystem::path& source,
-                  const WaveformPeaks& peaks)
+bool savePeakFile(const std::filesystem::path& peakFile, const SourceStamp& stamp, const WaveformPeaks& peaks)
 {
-    const std::optional<SourceStamp> stamp = stampOf(source);
-    if (!stamp)
-    {
-        return false;
-    }
-
     std::error_code error;
     std::filesystem::create_directories(peakFile.parent_path(), error);
 
@@ -179,10 +164,10 @@ bool savePeakFile(const std::filesystem::path& peakFile, const std::filesystem::
     temporary += ".tmp";
     {
         std::ofstream file(temporary, std::ios::binary | std::ios::trunc);
-        file.write(magic.data(), magic.size());
+        file.write(magic.data(), static_cast<std::streamsize>(magic.size()));
         writeValue(file, formatVersion);
-        writeValue(file, stamp->size);
-        writeValue(file, stamp->modified);
+        writeValue(file, stamp.size);
+        writeValue(file, stamp.modified);
         writeValue(file, static_cast<std::uint32_t>(peaks.channelCount));
         writeValue(file, peaks.sampleRate);
         writeValue(file, peaks.frameCount);
@@ -211,14 +196,8 @@ bool savePeakFile(const std::filesystem::path& peakFile, const std::filesystem::
     return true;
 }
 
-std::optional<WaveformPeaks> loadPeakFile(const std::filesystem::path& peakFile, const std::filesystem::path& source)
+std::optional<WaveformPeaks> loadPeakFile(const std::filesystem::path& peakFile, const SourceStamp& stamp)
 {
-    const std::optional<SourceStamp> stamp = stampOf(source);
-    if (!stamp)
-    {
-        return std::nullopt;
-    }
-
     std::ifstream file(peakFile, std::ios::binary | std::ios::ate);
     if (!file)
     {
@@ -234,7 +213,7 @@ std::optional<WaveformPeaks> loadPeakFile(const std::filesystem::path& peakFile,
     std::uint32_t levels = 0;
     WaveformPeaks peaks;
     if (!readValue(file, fileMagic) || fileMagic != magic || !readValue(file, version) || version != formatVersion ||
-        !readValue(file, fileStamp.size) || !readValue(file, fileStamp.modified) || fileStamp != *stamp ||
+        !readValue(file, fileStamp.size) || !readValue(file, fileStamp.modified) || fileStamp != stamp ||
         !readValue(file, channels) || channels == 0 || channels > maxChannels || !readValue(file, peaks.sampleRate) ||
         !readValue(file, peaks.frameCount) || !readValue(file, levels) || levels == 0)
     {
@@ -284,7 +263,7 @@ std::filesystem::path peakFilePath(const std::filesystem::path& cacheDirectory, 
     std::uint64_t hash = 0xcbf29ce484222325;
     for (const char8_t byte : absolute.lexically_normal().generic_u8string())
     {
-        hash ^= static_cast<std::uint8_t>(byte);
+        hash ^= static_cast<std::uint64_t>(byte);
         hash *= 0x100000001b3;
     }
 
@@ -332,19 +311,21 @@ void PeakCache::run(std::stop_token stop)
             m_queue.pop_front();
         }
 
+        const std::optional<SourceStamp> stamp = stampSource(source);
+        if (!stamp)
+        {
+            continue;
+        }
         const std::filesystem::path peakFile = peakFilePath(m_cacheDirectory, source);
-        std::optional<WaveformPeaks> peaks = loadPeakFile(peakFile, source);
+        std::optional<WaveformPeaks> peaks = loadPeakFile(peakFile, *stamp);
         if (!peaks)
         {
             peaks = buildWaveformPeaks(source, stop);
-            if (peaks)
+            if (!peaks)
             {
-                savePeakFile(peakFile, source, *peaks);
+                continue;
             }
-        }
-        if (!peaks)
-        {
-            continue;
+            savePeakFile(peakFile, *stamp, *peaks);
         }
 
         auto shared = std::make_shared<const WaveformPeaks>(std::move(*peaks));
