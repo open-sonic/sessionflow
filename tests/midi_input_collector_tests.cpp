@@ -5,6 +5,7 @@
 #include <array>
 #include <cmath>
 #include <memory>
+#include <vector>
 
 using namespace sessionflow;
 
@@ -175,4 +176,47 @@ TEST_CASE("a busy input doesn't hold back earlier messages from another")
     REQUIRE(collector->collect(s_blockStartNs, s_frames, s_sampleRate, events) == 2);
     CHECK(events[0].data[1] == 64);
     CHECK(events[1].data[1] == 60);
+}
+
+TEST_CASE("a note-off a full queue dropped arrives once the queue has drained")
+{
+    auto collector = std::make_unique<MidiInputCollector>();
+    for (std::size_t i = 0; i < MidiInputCollector::queueCapacity; ++i)
+    {
+        REQUIRE(collector->push(0, noteOn(s_windowStartNs, 60)));
+    }
+    CHECK_FALSE(collector->push(0, {.timeNs = s_windowStartNs, .data = {0x81, 61, 64}}));
+
+    SECTION("by the audio thread")
+    {
+        std::vector<MidiEvent> events(MidiInputCollector::queueCapacity + 1);
+        REQUIRE(collector->collect(s_blockStartNs, s_frames, s_sampleRate, events) == events.size());
+        CHECK(events.back() == MidiEvent{.sampleOffset = s_frames - 1, .data = {0x81, 61, 0}});
+    }
+
+    SECTION("ahead of the input's next message")
+    {
+        std::vector<MidiEvent> events(MidiInputCollector::queueCapacity);
+        REQUIRE(collector->collect(s_blockStartNs, s_frames, s_sampleRate, events) == events.size());
+
+        REQUIRE(collector->push(0, {.timeNs = s_blockStartNs + s_millisecondNs, .data = {0x91, 61, 100}}));
+        REQUIRE(collector->collect(s_blockStartNs + s_blockNs, s_frames, s_sampleRate, events) == 2);
+        CHECK(events[0].data == std::array<std::uint8_t, 3>{0x81, 61, 0});
+        CHECK(events[1].data == std::array<std::uint8_t, 3>{0x91, 61, 100});
+    }
+}
+
+TEST_CASE("reset keeps the releases it drops")
+{
+    auto collector = std::make_unique<MidiInputCollector>();
+    collector->push(2, noteOn(s_windowStartNs, 60));
+    collector->push(2, {.timeNs = s_windowStartNs, .data = {0x90, 62, 0}});
+    collector->push(2, {.timeNs = s_windowStartNs, .data = {0xB3, 64, 0}});
+
+    collector->reset();
+
+    std::array<MidiEvent, 8> events{};
+    REQUIRE(collector->collect(s_blockStartNs, s_frames, s_sampleRate, events) == 2);
+    CHECK(events[0].data == std::array<std::uint8_t, 3>{0x80, 62, 0});
+    CHECK(events[1].data == std::array<std::uint8_t, 3>{0xB3, 64, 0});
 }

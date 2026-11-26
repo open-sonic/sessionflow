@@ -1,6 +1,7 @@
 #include "midi/midi_input_collector.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <chrono>
 #include <limits>
 
@@ -11,6 +12,10 @@ namespace
 {
 
 constexpr double s_nanosecondsPerSecond = 1e9;
+constexpr std::uint8_t s_noteOff = 0x80;
+constexpr std::uint8_t s_noteOn = 0x90;
+constexpr std::uint8_t s_controlChange = 0xB0;
+constexpr std::uint8_t s_sustainPedal = 64;
 
 } // namespace
 
@@ -21,12 +26,79 @@ std::int64_t midiInputClockNs() noexcept
     return duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count();
 }
 
-bool MidiInputCollector::push(std::size_t source, const TimedMidiMessage& message) noexcept
+void MidiInputCollector::remember(LostReleases& lost,
+                                  const std::array<std::uint8_t, 3>& data) noexcept SESSIONFLOW_NONBLOCKING
 {
-    if (m_sources[source].queue.tryPush(message))
+    const std::uint8_t type = data[0] & 0xF0;
+    const std::size_t channel = data[0] & 0x0F;
+    if (type == s_noteOff || (type == s_noteOn && data[2] == 0))
+    {
+        const std::size_t bit = channel * s_keyCount + (data[1] & 0x7F);
+        lost.noteOffs[bit / 64].fetch_or(std::uint64_t{1} << (bit % 64), std::memory_order_relaxed);
+    }
+    else if (type == s_controlChange && data[1] == s_sustainPedal && data[2] < 64)
+    {
+        lost.sustainOffs.fetch_or(static_cast<std::uint16_t>(1u << channel), std::memory_order_relaxed);
+    }
+    else
+    {
+        return;
+    }
+    lost.any.store(true, std::memory_order_release);
+}
+
+template <typename Emit>
+bool MidiInputCollector::flush(LostReleases& lost, Emit&& emit) noexcept SESSIONFLOW_NONBLOCKING
+{
+    if (!lost.any.exchange(false, std::memory_order_acq_rel))
     {
         return true;
     }
+
+    for (std::size_t word = 0; word < s_lostNoteOffWords; ++word)
+    {
+        std::uint64_t bits = lost.noteOffs[word].exchange(0, std::memory_order_relaxed);
+        while (bits != 0)
+        {
+            const std::size_t bit = word * 64 + static_cast<std::size_t>(std::countr_zero(bits));
+            const auto status = static_cast<std::uint8_t>(s_noteOff | (bit / s_keyCount));
+            if (!emit(std::array<std::uint8_t, 3>{status, static_cast<std::uint8_t>(bit % s_keyCount), 0}))
+            {
+                lost.noteOffs[word].fetch_or(bits, std::memory_order_relaxed);
+                lost.any.store(true, std::memory_order_release);
+                return false;
+            }
+            bits &= bits - 1;
+        }
+    }
+
+    std::uint16_t channels = lost.sustainOffs.exchange(0, std::memory_order_relaxed);
+    while (channels != 0)
+    {
+        const auto status = static_cast<std::uint8_t>(s_controlChange | std::countr_zero(channels));
+        if (!emit(std::array<std::uint8_t, 3>{status, s_sustainPedal, 0}))
+        {
+            lost.sustainOffs.fetch_or(channels, std::memory_order_relaxed);
+            lost.any.store(true, std::memory_order_release);
+            return false;
+        }
+        channels &= static_cast<std::uint16_t>(channels - 1);
+    }
+    return true;
+}
+
+bool MidiInputCollector::push(std::size_t source, const TimedMidiMessage& message) noexcept
+{
+    Source& target = m_sources[source];
+    const auto pushLost = [&](const std::array<std::uint8_t, 3>& data)
+    { return target.queue.tryPush({.timeNs = message.timeNs, .data = data}); };
+
+    // Lost releases go first, so they stay ahead of everything played after them.
+    if (flush(target.lost, pushLost) && target.queue.tryPush(message))
+    {
+        return true;
+    }
+    remember(target.lost, message.data);
     m_droppedCount.fetch_add(1, std::memory_order_relaxed);
     return false;
 }
@@ -94,6 +166,29 @@ std::size_t MidiInputCollector::collect(std::int64_t blockStartNs, std::size_t f
         out[count++] = MidiEvent{.sampleOffset = offset, .data = earliest->pending->data};
         earliest->pending.reset();
     }
+
+    // Releases a full queue lost are newer than anything that was queued, so they wait until
+    // their source has run empty and then go at the end of the block.
+    const auto emit = [&](const std::array<std::uint8_t, 3>& data)
+    {
+        if (count == out.size())
+        {
+            return false;
+        }
+        out[count++] = MidiEvent{.sampleOffset = lastFrame, .data = data};
+        return true;
+    };
+    for (Source& source : m_sources)
+    {
+        if (!source.pending)
+        {
+            source.pending = source.queue.tryPop();
+        }
+        if (!source.pending)
+        {
+            flush(source.lost, emit);
+        }
+    }
     return count;
 }
 
@@ -101,9 +196,14 @@ void MidiInputCollector::reset() noexcept SESSIONFLOW_NONBLOCKING
 {
     for (Source& source : m_sources)
     {
-        source.pending.reset();
-        while (source.queue.tryPop())
+        if (source.pending)
         {
+            remember(source.lost, source.pending->data);
+            source.pending.reset();
+        }
+        while (const std::optional<TimedMidiMessage> message = source.queue.tryPop())
+        {
+            remember(source.lost, message->data);
         }
     }
     m_previousBlockStartNs.reset();

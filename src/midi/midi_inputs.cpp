@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bitset>
 #include <mutex>
 #include <optional>
 
@@ -18,6 +19,62 @@ std::string displayName(const libremidi::input_port& port)
 {
     return port.display_name.empty() ? port.port_name : port.display_name;
 }
+
+// The notes and sustain pedals an input holds down, so unplugging it can release them.
+class HeldNotes
+{
+  public:
+    void track(const std::array<std::uint8_t, 3>& data) noexcept
+    {
+        const std::uint8_t type = data[0] & 0xF0;
+        const std::size_t channel = data[0] & 0x0F;
+        const std::size_t note = channel * s_keyCount + (data[1] & 0x7F);
+        if (type == 0x90 && data[2] != 0)
+        {
+            m_notes.set(note);
+        }
+        else if (type == 0x80 || type == 0x90)
+        {
+            m_notes.reset(note);
+        }
+        else if (type == 0xB0 && data[1] == s_sustainPedal)
+        {
+            m_sustain.set(channel, data[2] >= 64);
+        }
+    }
+
+    // Pushes a note-off for every held note and a release for every held pedal.
+    void release(MidiInputCollector& collector, std::size_t source)
+    {
+        const std::int64_t now = midiInputClockNs();
+        for (std::size_t note = 0; note < m_notes.size(); ++note)
+        {
+            if (m_notes.test(note))
+            {
+                const auto status = static_cast<std::uint8_t>(0x80 | (note / s_keyCount));
+                collector.push(source,
+                               {.timeNs = now, .data = {status, static_cast<std::uint8_t>(note % s_keyCount), 0}});
+            }
+        }
+        for (std::size_t channel = 0; channel < m_sustain.size(); ++channel)
+        {
+            if (m_sustain.test(channel))
+            {
+                const auto status = static_cast<std::uint8_t>(0xB0 | channel);
+                collector.push(source, {.timeNs = now, .data = {status, s_sustainPedal, 0}});
+            }
+        }
+        m_notes.reset();
+        m_sustain.reset();
+    }
+
+  private:
+    static constexpr std::size_t s_keyCount = 128;
+    static constexpr std::uint8_t s_sustainPedal = 64;
+
+    std::bitset<16 * s_keyCount> m_notes;
+    std::bitset<16> m_sustain;
+};
 
 } // namespace
 
@@ -42,6 +99,8 @@ struct MidiInputs::Impl
     MidiInputCollector collector;
     mutable std::mutex mutex;
     std::array<std::optional<libremidi::input_port>, s_slotCount> ports;
+    // Written by each input's callback thread, read by close() once that thread has joined.
+    std::array<HeldNotes, s_slotCount> heldNotes;
     std::array<std::unique_ptr<libremidi::midi_in>, s_slotCount> inputs;
     std::optional<libremidi::observer> observer;
 
@@ -76,6 +135,7 @@ struct MidiInputs::Impl
             }
             TimedMidiMessage timed{.timeNs = message.timestamp};
             std::copy(message.bytes.begin(), message.bytes.end(), timed.data.begin());
+            heldNotes[slot].track(timed.data);
             collector.push(slot, timed);
         };
         config.on_error = [](libremidi::midi_error, std::string_view message) { spdlog::warn("midi: {}", message); };
@@ -108,6 +168,7 @@ struct MidiInputs::Impl
         // Joins the callback thread, so a later input can take over this slot as the single
         // producer of its queue.
         inputs[slot].reset();
+        heldNotes[slot].release(collector, slot);
         ports[slot].reset();
         spdlog::info("midi: closed {}", displayName(port));
     }

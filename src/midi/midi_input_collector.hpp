@@ -35,7 +35,8 @@ class MidiInputCollector
     static constexpr std::size_t queueCapacity = 1024;
 
     // Called from the callback thread of source. Drops the message and returns false when that
-    // source's queue is full.
+    // source's queue is full. A dropped note-off or sustain release is remembered and delivered
+    // once the queue has room again, so no note hangs.
     bool push(std::size_t source, const TimedMidiMessage& message) noexcept;
 
     // Audio thread. Maps the messages stamped between the previous call's blockStartNs and this
@@ -48,18 +49,40 @@ class MidiInputCollector
     std::size_t collect(std::int64_t blockStartNs, std::size_t frameCount, double sampleRate,
                         std::span<MidiEvent> out) noexcept SESSIONFLOW_NONBLOCKING;
 
-    // Audio thread, when the stream starts. Drops what was queued while it was stopped.
+    // Audio thread, when the stream starts. Drops what was queued while it was stopped, except
+    // note-offs and sustain releases, which the next collect() delivers at the end of its block.
     void reset() noexcept SESSIONFLOW_NONBLOCKING;
 
     // Messages lost to full queues since construction.
     std::uint64_t droppedCount() const noexcept;
 
   private:
+    static constexpr std::size_t s_channelCount = 16;
+    static constexpr std::size_t s_keyCount = 128;
+    static constexpr std::size_t s_lostNoteOffWords = s_channelCount * s_keyCount / 64;
+
+    // Releases that couldn't be queued, written by both threads. Each bit is sent exactly once
+    // by whichever thread clears it first: the producer before its next message, or the audio
+    // thread once the queue has run empty, so they never overtake older queued messages.
+    struct LostReleases
+    {
+        std::array<std::atomic<std::uint64_t>, s_lostNoteOffWords> noteOffs{};
+        std::atomic<std::uint16_t> sustainOffs{0};
+        std::atomic<bool> any{false};
+    };
+
     struct Source
     {
         SpscQueue<TimedMidiMessage, queueCapacity> queue;
         std::optional<TimedMidiMessage> pending;
+        LostReleases lost;
     };
+
+    static void remember(LostReleases& lost, const std::array<std::uint8_t, 3>& data) noexcept SESSIONFLOW_NONBLOCKING;
+
+    // Hands each lost release to emit, which returns false when it has no room. Returns
+    // whether all of them went out.
+    template <typename Emit> static bool flush(LostReleases& lost, Emit&& emit) noexcept SESSIONFLOW_NONBLOCKING;
 
     std::array<Source, maxSources> m_sources;
     std::optional<std::int64_t> m_previousBlockStartNs;
