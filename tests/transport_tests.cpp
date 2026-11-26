@@ -2,6 +2,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <memory>
@@ -216,6 +217,29 @@ TEST_CASE("a tempo change moves the loop end with its bar")
     // A bar at 60 bpm is 192000 samples instead of 96000.
     CHECK(positions[191999] == 191999);
     CHECK(positions[192000] == 0);
+}
+
+TEST_CASE("a faster tempo near the loop end keeps the playhead inside the loop")
+{
+    // A bar at 90 bpm and 44.1 kHz is 117600 samples. At 186.98 bpm the bar ends between
+    // samples 56604 and 56605, and the playhead one sample before the old end maps to 56604.5.
+    // Rounding that to the nearest sample would land on the new loop end and escape the loop.
+    const auto transport = makeTransport(90.0, 44100.0);
+    REQUIRE(transport->setLoop({.start = 0, .end = s_bar}));
+    REQUIRE(transport->setLoopEnabled(true));
+    REQUIRE(transport->play());
+    for (SampleCount remaining = 117599; remaining > 0; remaining -= 512)
+    {
+        transport->advance(static_cast<std::size_t>(std::min<SampleCount>(remaining, 512)));
+    }
+    REQUIRE(transport->position() == 117599);
+
+    REQUIRE(transport->setTimeMap(timeMapAt(186.98, 44100.0)));
+    const std::span<const TransportSegment> segments = transport->advance(64);
+
+    REQUIRE(segments.size() == 2);
+    CHECK(segments[0] == TransportSegment{.offset = 0, .frameCount = 1, .position = 56604});
+    CHECK(segments[1] == TransportSegment{.offset = 1, .frameCount = 63, .position = 0});
 }
 
 TEST_CASE("time maps wait for the audio thread to hand back the ones they replace")

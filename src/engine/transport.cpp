@@ -1,5 +1,6 @@
 #include "engine/transport.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <optional>
@@ -115,8 +116,18 @@ void Transport::apply(const Command& command) noexcept SESSIONFLOW_NONBLOCKING
     case Command::Type::SetTimeMap:
     {
         // Keep the playhead on the same musical position under the new tempo.
+        const TimeMap& next = *command.timeMap;
+        const bool wasInLoop = isLooping() && m_position >= m_timeMap->sampleAt(m_loop.start) &&
+                               m_position < m_timeMap->sampleAt(m_loop.end);
         const double ticks = m_timeMap->ticksAt(static_cast<double>(m_position));
-        m_position = static_cast<SampleCount>(std::llround(command.timeMap->samplesAt(ticks)));
+        m_position = static_cast<SampleCount>(std::llround(next.samplesAt(ticks)));
+        // Rounding can land on or past the new loop end, which would play out of the loop.
+        const SampleCount loopStart = next.sampleAt(m_loop.start);
+        const SampleCount loopEnd = next.sampleAt(m_loop.end);
+        if (wasInLoop && loopEnd > loopStart)
+        {
+            m_position = std::clamp(m_position, loopStart, loopEnd - 1);
+        }
         [[maybe_unused]] const bool isRetired = m_retiredTimeMaps.tryPush(m_timeMap);
         assert(isRetired);
         m_timeMap = command.timeMap;
@@ -138,7 +149,7 @@ std::span<const TransportSegment> Transport::advance(std::size_t frameCount) noe
     {
         const SampleCount loopStart = m_timeMap->sampleAt(m_loop.start);
         const SampleCount loopEnd = m_timeMap->sampleAt(m_loop.end);
-        const bool isLooping = m_isLoopEnabled && loopEnd > loopStart;
+        const bool isLooping = this->isLooping() && loopEnd > loopStart;
 
         std::size_t offset = 0;
         while (offset < frameCount)

@@ -127,6 +127,11 @@ class Transport
 
     void apply(const Command& command) noexcept SESSIONFLOW_NONBLOCKING;
 
+    bool isLooping() const noexcept
+    {
+        return m_isLoopEnabled && m_loop.end > m_loop.start;
+    }
+
     // Shared between the threads.
     SpscQueue<Command, s_commandCapacity> m_commands;
     SpscQueue<const TimeMap*, s_retiredCapacity> m_retiredTimeMaps;

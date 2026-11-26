@@ -18,10 +18,11 @@ namespace sessionflow
 class Metronome
 {
   public:
-    // Control thread. Renders the two clicks, so it allocates.
+    // Control thread, before the audio thread runs: render() points into the clicks this
+    // replaces. Renders the two clicks, so it allocates.
     void prepare(double sampleRate);
 
-    // Safe from any thread.
+    // Safe from any thread. Disabling lets a running click ring out instead of cutting it.
     void setEnabled(bool isEnabled) noexcept;
 
     // Audio thread. Adds clicks for the transport segments of this block into every channel

@@ -164,6 +164,23 @@ TEST_CASE("a stopped or disabled metronome stays silent")
     CHECK_FALSE(disabled.heardAnything);
 }
 
+TEST_CASE("a click that started before disabling rings out without new clicks")
+{
+    ClickRecorder recorder(120.0, 48000.0, 64);
+    REQUIRE(recorder.transport.play());
+    recorder.run(1);
+    REQUIRE(recorder.clicks.size() == 1);
+    recorder.metronome.setEnabled(false);
+    recorder.heardAnything = false;
+
+    recorder.run(1);
+    CHECK(recorder.heardAnything);
+
+    // Past the next beat at 24000 samples: the tail is over and no new click started.
+    recorder.run(400);
+    CHECK(recorder.clicks.size() == 1);
+}
+
 TEST_CASE("a click that started before stop rings out")
 {
     ClickRecorder recorder(120.0, 48000.0, 64);

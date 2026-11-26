@@ -73,7 +73,7 @@ void Metronome::render(AudioBufferView output, std::span<const TransportSegment>
 {
     if (!m_isEnabled.load(std::memory_order_relaxed))
     {
-        m_click = nullptr;
+        mixClick(output, 0, output.frameCount());
         return;
     }
 
