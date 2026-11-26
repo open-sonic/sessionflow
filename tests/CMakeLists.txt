@@ -14,12 +14,15 @@ add_executable(sessionflow_tests
     database_tests.cpp
     device_listing_tests.cpp
     gain_tests.cpp
+    metronome_tests.cpp
     plugin_folders_tests.cpp
     project_tests.cpp
     resampler_tests.cpp
     smoother_tests.cpp
     spsc_queue_tests.cpp
+    time_map_tests.cpp
     time_tests.cpp
+    transport_tests.cpp
     version_tests.cpp
 )
 target_include_directories(sessionflow_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
