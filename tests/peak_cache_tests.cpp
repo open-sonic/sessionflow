@@ -207,7 +207,9 @@ TEST_CASE("peak cache builds in the background and reuses the file next time")
     std::shared_ptr<const WaveformPeaks> loaded = waitForPeaks(cache);
     REQUIRE(loaded);
     requireSamePeaks(*loaded, *built);
-    CHECK(std::filesystem::last_write_time(peakFile) == written);
+    // libc++ keeps file times in __int128, which Catch can't print, so compare outside the macro.
+    const bool reused = std::filesystem::last_write_time(peakFile) == written;
+    CHECK(reused);
 }
 
 TEST_CASE("peak cache stops while a source is still queued")
