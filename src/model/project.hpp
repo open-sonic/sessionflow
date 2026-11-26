@@ -24,11 +24,23 @@ struct Note
     bool operator==(const Note&) const = default;
 };
 
+// A MIDI controller value inside a clip. Kept as MIDI instead of an automation lane, so
+// imported files and recorded controllers play back exactly as they came in.
+struct ControlChange
+{
+    TickCount position = 0; // relative to the clip start
+    std::uint8_t controller = 1;
+    std::uint8_t value = 0;
+
+    bool operator==(const ControlChange&) const = default;
+};
+
 struct MidiClip
 {
     TickCount position = 0;
     TickCount length = 0;
     immer::flex_vector<Note> notes{};
+    immer::flex_vector<ControlChange> controlChanges{}; // sorted by position
 
     bool operator==(const MidiClip&) const = default;
 };
