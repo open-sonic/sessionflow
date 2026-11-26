@@ -151,3 +151,28 @@ TEST_CASE("an invalid sample rate collects nothing")
     CHECK(collector->collect(s_blockStartNs, s_frames, std::nan(""), events) == 0);
     CHECK(collector->collect(s_blockStartNs, s_frames, s_sampleRate, events) == 1);
 }
+
+TEST_CASE("late messages from several inputs keep their time order")
+{
+    auto collector = std::make_unique<MidiInputCollector>();
+    collector->push(0, noteOn(s_windowStartNs - 2 * s_millisecondNs, 60));
+    collector->push(1, noteOn(s_windowStartNs - 3 * s_millisecondNs, 62));
+
+    std::array<MidiEvent, 8> events{};
+    REQUIRE(collector->collect(s_blockStartNs, s_frames, s_sampleRate, events) == 2);
+    CHECK(events[0].data[1] == 62);
+    CHECK(events[1].data[1] == 60);
+}
+
+TEST_CASE("a busy input doesn't hold back earlier messages from another")
+{
+    auto collector = std::make_unique<MidiInputCollector>();
+    collector->push(0, noteOn(s_windowStartNs + 2 * s_millisecondNs, 60));
+    collector->push(0, noteOn(s_windowStartNs + 3 * s_millisecondNs, 62));
+    collector->push(1, noteOn(s_windowStartNs + 1 * s_millisecondNs, 64));
+
+    std::array<MidiEvent, 2> events{};
+    REQUIRE(collector->collect(s_blockStartNs, s_frames, s_sampleRate, events) == 2);
+    CHECK(events[0].data[1] == 64);
+    CHECK(events[1].data[1] == 60);
+}

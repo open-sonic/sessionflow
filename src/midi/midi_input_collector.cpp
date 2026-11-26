@@ -12,23 +12,6 @@ namespace
 
 constexpr double s_nanosecondsPerSecond = 1e9;
 
-// Insertion sort: stable, so events at the same offset keep their arrival order, and it
-// needs no allocation.
-void sortBySampleOffset(std::span<MidiEvent> events) noexcept SESSIONFLOW_NONBLOCKING
-{
-    for (std::size_t i = 1; i < events.size(); ++i)
-    {
-        const MidiEvent event = events[i];
-        std::size_t j = i;
-        while (j > 0 && events[j - 1].sampleOffset > event.sampleOffset)
-        {
-            events[j] = events[j - 1];
-            --j;
-        }
-        events[j] = event;
-    }
-}
-
 } // namespace
 
 std::int64_t midiInputClockNs() noexcept
@@ -75,32 +58,42 @@ std::size_t MidiInputCollector::collect(std::int64_t blockStartNs, std::size_t f
     const double framesPerNanosecond = windowLengthNs > 0.0 ? static_cast<double>(frameCount) / windowLengthNs : 0.0;
     const auto lastFrame = static_cast<std::uint32_t>(frameCount - 1);
 
+    // Merges the sources by time, so late input from several devices keeps its order and a busy
+    // source can't push the others' earlier messages into the next block.
     std::size_t count = 0;
-    for (Source& source : m_sources)
+    std::uint32_t previousOffset = 0;
+    while (count < out.size())
     {
-        while (count < out.size())
+        Source* earliest = nullptr;
+        for (Source& source : m_sources)
         {
             if (!source.pending)
             {
                 source.pending = source.queue.tryPop();
             }
-            if (!source.pending || source.pending->timeNs >= blockStartNs)
+            if (source.pending && source.pending->timeNs < blockStartNs &&
+                (earliest == nullptr || source.pending->timeNs < earliest->pending->timeNs))
             {
-                break;
+                earliest = &source;
             }
-
-            std::uint32_t offset = 0;
-            if (source.pending->timeNs > windowStartNs)
-            {
-                const double frame = static_cast<double>(source.pending->timeNs - windowStartNs) * framesPerNanosecond;
-                offset = frame < lastFrame ? static_cast<std::uint32_t>(frame) : lastFrame;
-            }
-            out[count++] = MidiEvent{.sampleOffset = offset, .data = source.pending->data};
-            source.pending.reset();
         }
-    }
+        if (earliest == nullptr)
+        {
+            break;
+        }
 
-    sortBySampleOffset(out.first(count));
+        std::uint32_t offset = 0;
+        if (earliest->pending->timeNs > windowStartNs)
+        {
+            const double frame = static_cast<double>(earliest->pending->timeNs - windowStartNs) * framesPerNanosecond;
+            offset = frame < lastFrame ? static_cast<std::uint32_t>(frame) : lastFrame;
+        }
+        // A device clock that steps backwards must not unsort the block.
+        offset = std::max(offset, previousOffset);
+        previousOffset = offset;
+        out[count++] = MidiEvent{.sampleOffset = offset, .data = earliest->pending->data};
+        earliest->pending.reset();
+    }
     return count;
 }
 
