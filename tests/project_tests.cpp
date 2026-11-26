@@ -99,3 +99,13 @@ TEST_CASE("an audio clip and a MIDI clip at the same position are different clip
 
     CHECK(audio != midi);
 }
+
+TEST_CASE("controller changes are part of a MIDI clip's value")
+{
+    const MidiClip plain{.length = ticksPerBeat};
+    const MidiClip modulated{.length = ticksPerBeat,
+                             .controlChanges = {ControlChange{.position = 0, .controller = 1, .value = 64}}};
+
+    CHECK(plain != modulated);
+    CHECK(modulated.controlChanges[0].value == 64);
+}

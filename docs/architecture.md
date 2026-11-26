@@ -9,7 +9,7 @@ One directory and one CMake target per module. Every module starts with a small 
 | Directory | Target | Area | Contains today | Grows into |
 |---|---|---|---|---|
 | `src/core` | `sessionflow_core` | shared | Audio buffer, MIDI event, sample and tick time, SPSC queue, smoother, real-time marker, spdlog | Shared primitives only |
-| `src/model` | `sessionflow_model` | Engine | Immutable `Project`, tracks, audio and MIDI clips, notes, automation lanes and tempo map on immer | Full model, edit commands, undo, project file |
+| `src/model` | `sessionflow_model` | Engine | Immutable `Project`, tracks, audio and MIDI clips, notes, controller changes, automation lanes and tempo map on immer | Full model, edit commands, undo, project file |
 | `src/engine` | `sessionflow_engine` | Engine | `Processor` contract, `AudioIo` device streams and device listing with RtAudio | Transport, graph, mixer, recording, bounce |
 | `src/media` | `sessionflow_media` | Plugins | WAV, FLAC and MP3 decoding and streaming with dr_libs, resampling with r8brain | Warping, peak cache |
 | `src/midi` | `sessionflow_midi` | Plugins | MIDI inputs with libremidi, hot-plugging, timestamped input queues | MIDI input to the audio thread, recording, quantize |
