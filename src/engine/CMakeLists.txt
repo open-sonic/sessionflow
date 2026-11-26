@@ -1,5 +1,7 @@
 add_library(sessionflow_engine
     audio_device.cpp
+    audio_io.cpp
+    device_block.cpp
     metronome.cpp
     time_map.cpp
     transport.cpp

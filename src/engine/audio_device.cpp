@@ -19,9 +19,20 @@ std::vector<std::string> compiledAudioApis()
     return names;
 }
 
-std::vector<AudioDeviceInfo> listAudioDevices()
+std::vector<AudioDeviceInfo> listAudioDevices(std::string_view api)
 {
-    RtAudio audio(RtAudio::UNSPECIFIED,
+    RtAudio::Api rtApi = RtAudio::UNSPECIFIED;
+    if (!api.empty())
+    {
+        rtApi = RtAudio::getCompiledApiByDisplayName(std::string(api));
+        if (rtApi == RtAudio::UNSPECIFIED)
+        {
+            spdlog::warn("audio device: unknown audio API \"{}\"", api);
+            return {};
+        }
+    }
+
+    RtAudio audio(rtApi,
                   [](RtAudioErrorType, const std::string& message) { spdlog::warn("audio device: {}", message); });
 
     std::vector<AudioDeviceInfo> devices;
@@ -29,11 +40,13 @@ std::vector<AudioDeviceInfo> listAudioDevices()
     {
         const RtAudio::DeviceInfo info = audio.getDeviceInfo(id);
         devices.push_back({
-            .id = info.ID,
             .name = info.name,
             .inputChannels = info.inputChannels,
             .outputChannels = info.outputChannels,
             .isDefaultOutput = info.isDefaultOutput,
+            .isDefaultInput = info.isDefaultInput,
+            .sampleRates = info.sampleRates,
+            .preferredSampleRate = info.preferredSampleRate,
         });
     }
     return devices;

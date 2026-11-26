@@ -27,6 +27,7 @@ add_subdirectory(src/plugins)
 add_subdirectory(src/devices)
 add_subdirectory(src/library)
 add_subdirectory(src/app)
+add_subdirectory(tools)
 
 if(SESSIONFLOW_BUILD_TESTS)
     enable_testing()
