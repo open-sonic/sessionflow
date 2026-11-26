@@ -15,7 +15,7 @@ One directory and one CMake target per module. Every module starts with a small 
 | `src/midi` | `sessionflow_midi` | Plugins | MIDI inputs with libremidi, hot-plugging, timestamped input queues | MIDI input to the audio thread, recording, quantize |
 | `src/plugins` | `sessionflow_plugins` | Plugins | Default VST3 and CLAP folders per platform | Host process, IPC, VST3, CLAP, AU, scanner |
 | `src/devices` | `sessionflow_devices` | Devices | `GainDevice`, the reference `Processor` | Built-in effects and instruments |
-| `src/library` | `sessionflow_library` | App | SQLite connection wrapper | Library index, folder scanning |
+| `src/library` | `sessionflow_library` | App | SQLite connection and prepared statements, library index of samples, plugins and presets | Folder scanning |
 | `src/app` | `sessionflow` | App | SDL3 window with Dear ImGui | All UI |
 
 Dependencies point one way. Nothing depends on `app`, and `core` depends on nothing of ours.
