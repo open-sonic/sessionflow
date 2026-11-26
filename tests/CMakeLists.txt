@@ -11,7 +11,9 @@ FetchContent_MakeAvailable(Catch2)
 add_executable(sessionflow_tests
     audio_buffer_tests.cpp
     audio_file_tests.cpp
+    audio_io_tests.cpp
     database_tests.cpp
+    device_block_tests.cpp
     device_listing_tests.cpp
     gain_tests.cpp
     plugin_folders_tests.cpp
