@@ -38,13 +38,18 @@ class MidiInputCollector
     // source's queue is full.
     bool push(std::size_t source, const TimedMidiMessage& message) noexcept;
 
-    // Writes the messages stamped during the block before blockStartNs into out, sorted by
-    // sampleOffset, and returns how many it wrote. Input runs one block late so the spacing
-    // between events stays exact instead of snapping to block boundaries. Older messages land
-    // at offset 0. Messages stamped at or after blockStartNs, or that don't fit into out, wait
-    // for the next call.
-    std::size_t collect(std::int64_t blockStartNs, std::uint32_t frameCount, double sampleRate,
+    // Audio thread. Maps the messages stamped between the previous call's blockStartNs and this
+    // one onto the frames of this block, writes them into out sorted by sampleOffset and returns
+    // how many it wrote. Input runs one callback late so the spacing between events survives
+    // irregular callback sizes and timing instead of snapping to block boundaries. Older
+    // messages land at offset 0. Messages stamped at or after blockStartNs, or that don't fit
+    // into out, wait for the next call. The first call after construction or reset() assumes
+    // the previous callback started one block earlier.
+    std::size_t collect(std::int64_t blockStartNs, std::size_t frameCount, double sampleRate,
                         std::span<MidiEvent> out) noexcept SESSIONFLOW_NONBLOCKING;
+
+    // Audio thread, when the stream starts. Drops what was queued while it was stopped.
+    void reset() noexcept SESSIONFLOW_NONBLOCKING;
 
     // Messages lost to full queues since construction.
     std::uint64_t droppedCount() const noexcept;
@@ -57,6 +62,7 @@ class MidiInputCollector
     };
 
     std::array<Source, maxSources> m_sources;
+    std::optional<std::int64_t> m_previousBlockStartNs;
     std::atomic<std::uint64_t> m_droppedCount{0};
 };
 

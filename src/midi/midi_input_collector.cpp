@@ -1,6 +1,8 @@
 #include "midi/midi_input_collector.hpp"
 
+#include <algorithm>
 #include <chrono>
+#include <limits>
 
 namespace sessionflow
 {
@@ -46,18 +48,32 @@ bool MidiInputCollector::push(std::size_t source, const TimedMidiMessage& messag
     return false;
 }
 
-std::size_t MidiInputCollector::collect(std::int64_t blockStartNs, std::uint32_t frameCount, double sampleRate,
+std::size_t MidiInputCollector::collect(std::int64_t blockStartNs, std::size_t frameCount, double sampleRate,
                                         std::span<MidiEvent> out) noexcept SESSIONFLOW_NONBLOCKING
 {
-    if (frameCount == 0)
+    if (frameCount == 0 || frameCount > std::numeric_limits<std::uint32_t>::max() || !(sampleRate >= 1.0))
     {
         return 0;
     }
 
-    const double samplesPerNanosecond = sampleRate / s_nanosecondsPerSecond;
-    const auto blockLengthNs = static_cast<std::int64_t>(frameCount / samplesPerNanosecond);
-    const std::int64_t windowStartNs = blockStartNs - blockLengthNs;
-    const std::uint32_t lastFrame = frameCount - 1;
+    // The previous callback's start, not blockStart minus this block's length: callbacks vary
+    // in size and often arrive in bursts, and only the real spacing keeps every message inside
+    // exactly one window.
+    std::int64_t windowStartNs = 0;
+    if (m_previousBlockStartNs)
+    {
+        windowStartNs = std::min(*m_previousBlockStartNs, blockStartNs);
+    }
+    else
+    {
+        const double blockLengthNs = static_cast<double>(frameCount) * s_nanosecondsPerSecond / sampleRate;
+        windowStartNs = blockStartNs - static_cast<std::int64_t>(blockLengthNs);
+    }
+    m_previousBlockStartNs = blockStartNs;
+
+    const double windowLengthNs = static_cast<double>(blockStartNs - windowStartNs);
+    const double framesPerNanosecond = windowLengthNs > 0.0 ? static_cast<double>(frameCount) / windowLengthNs : 0.0;
+    const auto lastFrame = static_cast<std::uint32_t>(frameCount - 1);
 
     std::size_t count = 0;
     for (Source& source : m_sources)
@@ -76,9 +92,8 @@ std::size_t MidiInputCollector::collect(std::int64_t blockStartNs, std::uint32_t
             std::uint32_t offset = 0;
             if (source.pending->timeNs > windowStartNs)
             {
-                const auto frame = static_cast<std::uint32_t>(
-                    static_cast<double>(source.pending->timeNs - windowStartNs) * samplesPerNanosecond);
-                offset = frame < lastFrame ? frame : lastFrame;
+                const double frame = static_cast<double>(source.pending->timeNs - windowStartNs) * framesPerNanosecond;
+                offset = frame < lastFrame ? static_cast<std::uint32_t>(frame) : lastFrame;
             }
             out[count++] = MidiEvent{.sampleOffset = offset, .data = source.pending->data};
             source.pending.reset();
@@ -87,6 +102,18 @@ std::size_t MidiInputCollector::collect(std::int64_t blockStartNs, std::uint32_t
 
     sortBySampleOffset(out.first(count));
     return count;
+}
+
+void MidiInputCollector::reset() noexcept SESSIONFLOW_NONBLOCKING
+{
+    for (Source& source : m_sources)
+    {
+        source.pending.reset();
+        while (source.queue.tryPop())
+        {
+        }
+    }
+    m_previousBlockStartNs.reset();
 }
 
 std::uint64_t MidiInputCollector::droppedCount() const noexcept

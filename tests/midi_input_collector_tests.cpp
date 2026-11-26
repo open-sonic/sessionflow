@@ -3,6 +3,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <cmath>
 #include <memory>
 
 using namespace sessionflow;
@@ -11,7 +12,7 @@ namespace
 {
 
 constexpr double s_sampleRate = 48000.0;
-constexpr std::uint32_t s_frames = 480;
+constexpr std::size_t s_frames = 480;
 constexpr std::int64_t s_blockNs = 10'000'000;
 constexpr std::int64_t s_blockStartNs = 1'000'000'000;
 constexpr std::int64_t s_windowStartNs = s_blockStartNs - s_blockNs;
@@ -100,4 +101,53 @@ TEST_CASE("a full queue drops messages and counts them")
     CHECK_FALSE(collector->push(0, noteOn(s_windowStartNs, 60)));
     CHECK(collector->droppedCount() == 1);
     CHECK(collector->push(1, noteOn(s_windowStartNs, 60)));
+}
+
+TEST_CASE("the window follows the real spacing between callbacks")
+{
+    auto collector = std::make_unique<MidiInputCollector>();
+    std::array<MidiEvent, 8> events{};
+    REQUIRE(collector->collect(s_blockStartNs, s_frames, s_sampleRate, events) == 0);
+
+    SECTION("a smaller block")
+    {
+        collector->push(0, noteOn(s_blockStartNs + 5 * s_millisecondNs, 60));
+        REQUIRE(collector->collect(s_blockStartNs + s_blockNs, s_frames / 2, s_sampleRate, events) == 1);
+        CHECK(events[0].sampleOffset == s_frames / 4);
+    }
+
+    SECTION("two callbacks in a burst")
+    {
+        collector->push(0, noteOn(s_blockStartNs + 10 * s_millisecondNs, 60));
+        collector->push(0, noteOn(s_blockStartNs + 30 * s_millisecondNs, 62));
+        REQUIRE(collector->collect(s_blockStartNs + 2 * s_blockNs, s_frames, s_sampleRate, events) == 1);
+        CHECK(events[0].sampleOffset == s_frames / 2);
+
+        REQUIRE(collector->collect(s_blockStartNs + 2 * s_blockNs, s_frames, s_sampleRate, events) == 0);
+        REQUIRE(collector->collect(s_blockStartNs + 4 * s_blockNs, s_frames, s_sampleRate, events) == 1);
+        CHECK(events[0].sampleOffset == s_frames / 2);
+    }
+}
+
+TEST_CASE("reset drops what was queued while the stream was stopped")
+{
+    auto collector = std::make_unique<MidiInputCollector>();
+    collector->push(0, noteOn(s_windowStartNs, 60));
+    collector->push(3, noteOn(s_windowStartNs, 62));
+
+    collector->reset();
+
+    std::array<MidiEvent, 8> events{};
+    CHECK(collector->collect(s_blockStartNs, s_frames, s_sampleRate, events) == 0);
+}
+
+TEST_CASE("an invalid sample rate collects nothing")
+{
+    auto collector = std::make_unique<MidiInputCollector>();
+    collector->push(0, noteOn(s_windowStartNs, 60));
+
+    std::array<MidiEvent, 8> events{};
+    CHECK(collector->collect(s_blockStartNs, s_frames, 0.0, events) == 0);
+    CHECK(collector->collect(s_blockStartNs, s_frames, std::nan(""), events) == 0);
+    CHECK(collector->collect(s_blockStartNs, s_frames, s_sampleRate, events) == 1);
 }
